@@ -30,7 +30,7 @@ account-global and needs manual settings — prefer Claude Code (see Connect bel
    │                 contradictions, regenerates INDEX (human edits win)    │
    └──────────────────────────────┬───────────────────────────────────────┘
                 MCP over HTTP, no auth header — a SECRET in the URL PATH:
-                       https://<brain>.sprites.app/mcp/<secret>/<name>/
+                       https://<brain-host>/mcp/<secret>/<name>/
         ┌────────────────────┬──────────────┴───────┬─────────────────────┐
    Claude Code          claude.ai              Desktop                 Cowork
    (add the URL)        (add the URL)          (add the URL)           (add the URL)
@@ -82,30 +82,35 @@ Useful env: `BRAIN_GITHUB_MIRROR=owner/repo`, `BRAIN_NO_MIRROR=1`,
 
 ## Connect (Claude Code)
 
-Each teammate has a personal URL `https://<brain>.sprites.app/mcp/<secret>/<your-name>/`
-— the `<name>` is your attribution, and the URL **is** the credential (treat it like a
-password).
+**1. Get your connector URL — from your brain admin.** Whoever stood up the brain has it
+(it's on the onboarding card the installer prints). It looks like
+`https://<brain-host>/mcp/<secret>/<your-name>/`, where `<brain-host>` is wherever your
+team runs the brain. This URL **is** the credential — treat it like a password.
 
-**Recommended — the `know` plugin** (one install: the connector + `/know:recall`,
-`/know:contradictions`, `/know:resolve` commands + optional capture). Install it **scoped
-to the folder you want it in** — never the default `user` scope, which would enable the
-brain in *every* folder you open:
+**2. Install the `know` plugin, scoped to the folder you want it in.** You get the
+connector + the `/know:recall`, `/know:contradictions`, `/know:resolve` commands + optional
+capture. Use `--scope local` (this folder, just you) — **never** the default `user` scope,
+which enables the brain in *every* folder you open:
 
 ```
 cd /path/to/your/project
 claude plugin marketplace add podclave/know --scope local
-claude plugin install know@know --scope local --config brain_mcp_url="https://<brain>.sprites.app/mcp/<secret>/<your-name>/"
+claude plugin install know@know --scope local --config brain_mcp_url="<your-connector-url>"
 claude plugin enable know@know --scope local
 ```
 
-`--scope local` declares everything in `.claude/settings.local.json` (this folder, just
-you — gitignored); your URL goes to Claude Code's **secure storage**, never to any settings
-file. Already installed in the wrong (`user`) scope? Undo it with
-`claude plugin uninstall know@know` + `claude plugin marketplace remove know`, then redo
-with `--scope local`.
+`--scope local` declares everything in `.claude/settings.local.json` (gitignored, just
+you); your URL goes to Claude Code's **secure storage**, never to any settings file.
+Installed in the wrong (`user`) scope already? Undo it with `claude plugin uninstall
+know@know` + `claude plugin marketplace remove know`, then redo with `--scope local`.
 
-For a **team** repo, use `--scope project` instead (or commit `.claude/settings.json`) so
-the brain auto-enables **per-project** for everyone on clone + trust:
+**3. Verify and use it.** Run `claude` in that folder, then `/know:setup` (confirms the
+connection) — or just ask *"what does the team know about X?"*. The first call may pause a
+moment while an idle brain wakes. From then on Claude recalls when you ask about the
+team/project and saves durable facts as they come up; you never see a repo, sync, or file.
+
+**Team repo:** use `--scope project` instead (or commit `.claude/settings.json`) so the
+brain auto-enables **per-project** for everyone on clone + trust:
 
 ```json
 { "extraKnownMarketplaces": { "know": { "source": { "source": "github", "repo": "podclave/know" } } },
@@ -116,10 +121,7 @@ the brain auto-enables **per-project** for everyone on clone + trust:
 Reads auto-approve; `save`/`supersede`/`resolve` still prompt. Each teammate sets their own
 URL once via the plugin config — only the non-secret settings are committed.
 
-**Bare connector** (no `/know:` commands or capture): `claude mcp add --transport http --scope local know "<your-url>"`.
-
-Then just use Claude normally: it recalls when you ask about the team/project and saves
-durable facts as they come up. You never see a repo, sync, or file.
+**Bare connector** (no `/know:` commands or capture): `claude mcp add --transport http --scope local know "<your-connector-url>"`.
 
 ### claude.ai / Cowork — not recommended
 
@@ -131,7 +133,7 @@ plugin. Use Claude Code; reach for the web surfaces only if you must.
 
 ## Browse the brain (OKF visualizer)
 
-Open `https://<brain>.sprites.app/viewer/<secret>/` in a browser for an interactive
+Open `https://<brain-host>/viewer/<secret>/` in a browser for an interactive
 graph of the curated knowledge base — nodes are concepts (colored by `type`), edges are
 the cross-links; click a node to read the fact and follow its links. It's the OKF static
 visualizer rendered on demand from the live bundle; same secret-in-path as the connector
