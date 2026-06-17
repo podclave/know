@@ -28,7 +28,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from config import BOT_EMAILS, KB_REPO, SECRETARY_IDENTITY, model_id
+from config import BOT_EMAILS, KB_REPO, SECRETARY_IDENTITY, claude_bin, model_id
 from recall import GUARD_ENV
 from store import _git, push_mirror
 
@@ -208,7 +208,7 @@ def _run_agent(repo: Path, model: str, prompt: str, timeout: int):
     env = dict(os.environ, **{GUARD_ENV: "1"})
     try:
         p = subprocess.run(
-            ["claude", "-p", prompt, "--model", model, "--output-format", "text",
+            [claude_bin(), "-p", prompt, "--model", model, "--output-format", "text",
              "--allowed-tools", "Read", "Grep", "Glob", "Write", "Edit"],
             cwd=str(repo), capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:

@@ -14,7 +14,7 @@ import os
 import re
 from pathlib import Path
 
-from config import KB_REPO, model_id
+from config import KB_REPO, claude_bin, model_id
 
 # Recursion guard: the recall agent runs `claude`; this env marks the child so any
 # hook/agent that checks it bails instead of recursing (mirrors BRAIN_DISTILLER=1).
@@ -47,7 +47,7 @@ async def _run_claude(prompt: str, model: str, cwd: str, timeout: int):
     Returns (returncode, stdout, stderr)."""
     env = dict(os.environ, **{GUARD_ENV: "1"})
     proc = await asyncio.create_subprocess_exec(
-        "claude", "-p", prompt, "--model", model, "--output-format", "text",
+        claude_bin(), "-p", prompt, "--model", model, "--output-format", "text",
         "--allowed-tools", "Read", "Grep", "Glob",
         cwd=cwd, env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
