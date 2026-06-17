@@ -33,6 +33,14 @@ class FakeHandlers:
         self.calls.append(("supersede", fact_id, by, attribution))
         return "superseded"
 
+    async def contradictions(self):
+        self.calls.append(("contradictions",))
+        return "no open contradictions"
+
+    async def resolve(self, ident, decision, correction, note, attribution):
+        self.calls.append(("resolve", ident, decision, correction, note, attribution))
+        return f"resolved {ident} ({decision})"
+
 
 @pytest.fixture()
 def harness():
@@ -123,10 +131,11 @@ def test_non_dict_arguments_rejected(harness):
 
 
 # --- tool surface ------------------------------------------------------------
-def test_tools_list_is_the_four_tools(harness):
+def test_tools_list_is_the_full_surface(harness):
     client, _ = harness
     tools = rpc(client, "tools/list").json()["result"]["tools"]
-    assert {t["name"] for t in tools} == {"recall", "save", "list", "supersede"}
+    assert {t["name"] for t in tools} == {
+        "recall", "save", "list", "supersede", "contradictions", "resolve"}
     for t in tools:
         assert t["description"] and t["inputSchema"]["type"] == "object"
 
@@ -134,7 +143,7 @@ def test_tools_list_is_the_four_tools(harness):
 def test_every_listed_tool_dispatches(harness):
     """TOOLS and call_tool's if-chain must stay in sync."""
     client, _ = harness
-    superset = {"query": "x", "title": "t", "body": "b", "id": "a1"}
+    superset = {"query": "x", "title": "t", "body": "b", "id": "a1", "decision": "keep"}
     for t in rpc(client, "tools/list").json()["result"]["tools"]:
         body = call(client, t["name"], superset).json()
         assert "result" in body and not body["result"].get("isError"), t["name"]
@@ -182,6 +191,48 @@ def test_supersede_requires_id(harness):
     assert call(client, "supersede", {}).json()["result"]["isError"] is True
     call(client, "supersede", {"id": "a1", "by": "b2"})
     assert h.calls[-1] == ("supersede", "a1", "b2", NAME)
+
+
+def test_contradictions_dispatches(harness):
+    client, h = harness
+    r = call(client, "contradictions", {})
+    assert h.calls[-1] == ("contradictions",)
+    assert r.json()["result"]["content"][0]["text"] == "no open contradictions"
+
+
+def test_resolve_dispatches_with_attribution(harness):
+    client, h = harness
+    call(client, "resolve", {"id": "database.md", "decision": "replace",
+                             "correction": "MySQL 8 now", "note": "DBA approved"})
+    assert h.calls[-1] == ("resolve", "database.md", "replace", "MySQL 8 now",
+                           "DBA approved", NAME)
+
+
+def test_resolve_keep_needs_no_correction(harness):
+    client, h = harness
+    call(client, "resolve", {"id": "database.md", "decision": "keep"})
+    assert h.calls[-1] == ("resolve", "database.md", "keep", None, None, NAME)
+
+
+def test_resolve_requires_id_and_decision(harness):
+    client, h = harness
+    assert call(client, "resolve", {"decision": "keep"}).json()["result"]["isError"] is True
+    assert call(client, "resolve", {"id": "x"}).json()["result"]["isError"] is True
+    assert h.calls == []
+
+
+def test_resolve_rejects_unknown_decision(harness):
+    client, h = harness
+    body = call(client, "resolve", {"id": "x", "decision": "delete"}).json()["result"]
+    assert body["isError"] is True and "keep" in body["content"][0]["text"]
+    assert h.calls == []
+
+
+def test_resolve_replace_requires_correction(harness):
+    client, h = harness
+    body = call(client, "resolve", {"id": "x", "decision": "replace"}).json()["result"]
+    assert body["isError"] is True and "correction" in body["content"][0]["text"]
+    assert h.calls == []
 
 
 def test_unknown_tool_is_invalid_params(harness):

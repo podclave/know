@@ -17,8 +17,9 @@ installer). The KB data repo (`~/teamkb-kb` by default) is the truth.
   Streamable-HTTP: initialize/ping/tools/list/tools/call, notification→202, error
   codes, `isError` wrapping). Two changes: auth is `hmac.compare_digest` on the
   `<secret>` path segment (wrong secret → plain 404, never a 401/`WWW-Authenticate`
-  that would trip OAuth), and the tools are recall/save/list/supersede dispatched to an
-  injected `handlers` object (so the transport tests with a fake — no git, no claude).
+  that would trip OAuth), and the tools are recall/save/list/supersede plus
+  contradictions/resolve (the conversational dispute queue) dispatched to an injected
+  `handlers` object (so the transport tests with a fake — no git, no claude).
 - **`store.py`** — the git-markdown store. `save`/`list`/`supersede`, scrub-on-write,
   commits via the **env-pinned identity wrapper** (`-c user.email=…` per invocation,
   never a clonable gitconfig). `supersede` moves to `_superseded/` (never `rm`).

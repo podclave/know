@@ -363,6 +363,104 @@ def test_result_to_manifest_no_structured_no_salvage_is_empty_with_cost():
     assert m.get("incorporated_raw_ids") is None and m["_cost_usd"] == 0.002
 
 
+# --- conversational resolution: keep / replace, attribution, human-wins ------
+def _open_contradiction(repo, curated_body="PostgreSQL 16.", sources="[dave]"):
+    """Seed a curated fact + an open contradiction targeting it, committed as a prior
+    (bot) pass — the starting state a `resolve` call acts on."""
+    (repo.repo / "curated" / "database.md").write_text(
+        f"---\ntype: Decision\ntitle: Database\n---\n{curated_body}\n")
+    (repo.repo / "contradictions" / "database.md").write_text(
+        "---\ntype: Contradiction\nstatus: open\ntarget: database.md\n"
+        f"sources: {sources}\n---\nPostgres vs MySQL dispute.\n")
+    _sec_commit(repo.repo, "secretary: prior pass with an open contradiction")
+
+
+def test_resolve_keep_archives_record_and_leaves_curated(repo):
+    _open_contradiction(repo)
+    res = secretary.resolve_contradiction(repo.repo, "database.md", "keep",
+                                          actor="pat", note="migration was cancelled")
+    assert res["status"] == "resolved" and res["decision"] == "keep"
+    assert res["curated_updated"] is False
+    assert "PostgreSQL 16" in (repo.repo / "curated" / "database.md").read_text()
+    assert not (repo.repo / "contradictions" / "database.md").exists()  # out of open
+    moved = repo.repo / "contradictions" / "resolved" / "database.md"
+    assert moved.exists()
+    meta, _ = parse_md(moved.read_text())
+    assert meta["status"] == "resolved" and meta["resolved_by"] == "pat"
+    assert meta["decision"] == "keep" and meta["resolution_note"] == "migration was cancelled"
+    # committed under a NON-bot (human) identity so it rides human-wins
+    assert log_authors(repo.repo)[0] not in config.BOT_EMAILS
+
+
+def test_resolve_replace_updates_curated_preserving_frontmatter(repo):
+    _open_contradiction(repo)
+    res = secretary.resolve_contradiction(
+        repo.repo, "database", "replace",
+        text="Primary DB is MySQL 8 (migrated, DBA-approved).", actor="dave")
+    assert res["status"] == "resolved" and res["curated_updated"] is True
+    cur = (repo.repo / "curated" / "database.md").read_text()
+    assert "MySQL 8" in cur and "PostgreSQL 16" not in cur
+    meta, _ = parse_md(cur)
+    assert meta["type"] == "Decision" and meta["title"] == "Database"  # OKF fm preserved
+    assert "[Database](database.md)" in (repo.repo / "curated" / "index.md").read_text()
+    assert (repo.repo / "contradictions" / "resolved" / "database.md").exists()
+    assert log_authors(repo.repo)[0] not in config.BOT_EMAILS
+
+
+def test_resolved_replace_survives_a_later_pass(repo):
+    """The resolution must STICK: a later pass's agent cannot re-clobber it, because
+    the resolve commit is a human edit -> the concept is protected (human-wins)."""
+    _open_contradiction(repo)
+    secretary.resolve_contradiction(repo.repo, "database.md", "replace",
+                                    text="MySQL 8 is the primary database.", actor="dave")
+
+    def fake_agent(r, model, prompt, timeout):
+        (r / "curated" / "database.md").write_text(
+            "---\ntype: Decision\ntitle: Database\n---\nPostgreSQL 16 again.\n")
+        return {"summary": "tried to revert the resolved fact"}
+
+    secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    cur = (repo.repo / "curated" / "database.md").read_text()
+    assert "MySQL 8" in cur and "PostgreSQL 16 again" not in cur
+
+
+def test_resolve_is_mutually_exclusive_with_a_pass(repo):
+    import fcntl
+    _open_contradiction(repo)
+    lock = open(repo.repo / ".git" / "secretary.lock", "w")
+    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        res = secretary.resolve_contradiction(repo.repo, "database.md", "keep", actor="x")
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
+    assert res["status"] == "busy"
+    assert (repo.repo / "contradictions" / "database.md").exists()  # untouched
+
+
+def test_resolve_unknown_id_raises(repo):
+    with pytest.raises(ValueError):
+        secretary.resolve_contradiction(repo.repo, "nonexistent.md", "keep", actor="x")
+
+
+def test_resolve_rejects_bad_decision_and_replace_without_text(repo):
+    with pytest.raises(ValueError):
+        secretary.resolve_contradiction(repo.repo, "database.md", "delete", actor="a")
+    with pytest.raises(ValueError):
+        secretary.resolve_contradiction(repo.repo, "database.md", "replace", actor="a")
+
+
+def test_contradiction_records_lists_only_open(repo):
+    _open_contradiction(repo)
+    (repo.repo / "contradictions" / "resolved").mkdir(parents=True, exist_ok=True)
+    (repo.repo / "contradictions" / "resolved" / "old.md").write_text(
+        "---\ntype: Contradiction\nstatus: resolved\ntarget: old.md\n---\nclosed.\n")
+    recs = secretary.contradiction_records(repo.repo)
+    assert len(recs) == 1
+    assert recs[0]["id"] == "database.md" and recs[0]["target"] == "database.md"
+    assert recs[0]["sources"] == ["dave"] and "MySQL" in recs[0]["body"]
+
+
 def test_run_pass_threads_cost_into_result_and_note(repo):
     repo.save("f", "b", attribution="a")
     ids = _raw_ids(repo)

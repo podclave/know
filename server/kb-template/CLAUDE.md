@@ -14,7 +14,15 @@ rendered as an interactive graph by the OKF static visualizer — with zero lock
 > Humans: edit any fact freely. The secretary detects human edits by git author and
 > treats them as authoritative — it will never clobber your edit, and a machine fact
 > that contradicts yours becomes an open record in `contradictions/` for you to resolve,
-> never applied over the top of your change. Editing the disputed fact closes the record.
+> never applied over the top of your change.
+>
+> You resolve a dispute one of two ways, and both close the record (moved to
+> `contradictions/resolved/`, never deleted): **(a) right in a Claude conversation** —
+> ask "what's contested?" (the `contradictions` tool) and decide with the `resolve` tool
+> (`keep` the curated fact, or `replace` it with a correction); the decision is attributed
+> to you. Or **(b) edit the disputed curated fact yourself** (power-user / git path).
+> A conversational `resolve` commits under your name, so it rides the same "human always
+> wins" protection a hand-edit does.
 
 ## Config — the one pinned line
 

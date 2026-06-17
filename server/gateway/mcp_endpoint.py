@@ -84,6 +84,26 @@ TOOLS = [
        {"id": _STR("The id of the fact to retire (from `list` or `recall`)"),
         "by": _STR("Optional id or title of the fact that replaces it")},
        required=["id"]),
+    _t("contradictions",
+       "List the OPEN contradictions in the team brain — facts where a newer claim "
+       "conflicts with what's already curated, awaiting a human's decision. Call this "
+       "when the user asks what's disputed/contested/unresolved, or to find the id of "
+       "a dispute to `resolve`. Returns each dispute's id, the disputed concept, the "
+       "curated fact vs the conflicting claim, and who raised it.",
+       {}),
+    _t("resolve",
+       "Resolve an open contradiction (from `contradictions`, or a recall result "
+       "flagged DISPUTED) by recording the human's decision — no git or file editing "
+       "needed. The USER must make the call; you only carry it out. Use "
+       "decision='keep' if the existing curated fact is right (the conflicting claim "
+       "was wrong), or decision='replace' if the fact should change — then put the "
+       "corrected fact in `correction`. The decision is attributed to the caller and "
+       "archived as an audit trail.",
+       {"id": _STR("The contradiction id from `contradictions` (e.g. 'database.md')"),
+        "decision": _STR("'keep' (curated fact stands) or 'replace' (update the fact)"),
+        "correction": _STR("Required for 'replace': the corrected fact text to store"),
+        "note": _STR("Optional short note on why/how it was decided")},
+       required=["id", "decision"]),
 ]
 
 
@@ -126,6 +146,18 @@ async def call_tool(name: str, args: dict, attribution: str, handlers):
         return await handlers.list(_opt_str(args, "filter"))
     if name == "supersede":
         return await handlers.supersede(_req_str(args, "id"), _opt_str(args, "by"), attribution)
+    if name == "contradictions":
+        return await handlers.contradictions()
+    if name == "resolve":
+        decision = _req_str(args, "decision").lower()
+        if decision not in ("keep", "replace"):
+            raise ToolError("decision must be 'keep' or 'replace'")
+        correction = _opt_str(args, "correction")
+        if decision == "replace" and not correction:
+            raise ToolError("decision 'replace' requires the corrected fact in `correction`")
+        return await handlers.resolve(
+            ident=_req_str(args, "id"), decision=decision,
+            correction=correction, note=_opt_str(args, "note"), attribution=attribution)
     raise ToolError(f"unhandled tool: {name}")  # a TOOLS entry with no dispatch branch
 
 

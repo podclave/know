@@ -26,6 +26,7 @@ contradiction queue, never over the human (spec §13.4).
 import fcntl
 import json
 import re
+from contextlib import contextmanager
 from pathlib import Path
 
 from agent import SECRETARY_BUDGET_USD, run_sync
@@ -40,6 +41,32 @@ BASE_REF = "refs/secretary/base"   # local-only ref marking the last reconciled 
 CONTRA_DIR = "contradictions"      # one structured record per open conflict
 CONTRA_RESOLVED = "contradictions/resolved"  # closed conflicts (never rm)
 DEFAULT_MAX_BLAST = 25
+
+
+class SecretaryBusy(Exception):
+    """The single-flight lock is held by a running curation pass — callers retry."""
+
+
+@contextmanager
+def secretary_lock(repo: Path):
+    """The secretary's single-flight flock (.git/secretary.lock). Held by a curation
+    pass AND by a conversational `resolve` so the two are mutually exclusive — a
+    resolution can never interleave with a pass and have its writes clobbered. Non-
+    blocking: raises SecretaryBusy on contention so a caller returns a clean 'retry'
+    instead of hanging a tool call."""
+    lock_path = Path(repo) / ".git" / "secretary.lock"
+    lock = open(lock_path, "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock.close()
+        raise SecretaryBusy()
+    try:
+        yield
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
+
 
 CURATION_PROMPT = """Your ONLY job is to {marker} by reorganizing its markdown files \
 into an Open Knowledge Format (OKF) bundle. Read this repository's CLAUDE.md FIRST — \
@@ -264,6 +291,124 @@ def resolve_contradictions(repo: Path, protected: set, pre_open: set) -> int:
     return closed
 
 
+# --- conversational resolution (spec §13.4 — no git for the user) ------------
+RESOLVE_DECISIONS = ("keep", "replace")
+
+
+def contradiction_records(repo: Path) -> list:
+    """Parsed OPEN contradiction records for the conversational surface (the
+    `contradictions` tool). Each: id (the record filename, e.g. 'database.md'),
+    the disputed concept, who raised it, when, and the record body (curated-vs-
+    conflicting text). Read-only."""
+    from store import parse_md
+    out = []
+    for f in open_contradictions(repo):
+        meta, body = parse_md(f.read_text())
+        out.append({"id": f.name, "target": str(meta.get("target", f.stem)).strip(),
+                    "sources": meta.get("sources") or [],
+                    "created": meta.get("created"), "body": body.strip()})
+    return out
+
+
+def _find_contradiction(repo: Path, ident: str):
+    """Locate an OPEN contradiction record by id — tolerant of 'database',
+    'database.md', or its target concept. Returns the Path or None."""
+    from store import parse_md
+    ident = (ident or "").strip()
+    want = {ident, ident if ident.endswith(".md") else f"{ident}.md"}
+    for f in open_contradictions(repo):
+        meta, _ = parse_md(f.read_text())
+        target = str(meta.get("target", "")).strip()
+        if f.name in want or f.stem == ident or target in want or target == ident:
+            return f
+    return None
+
+
+def _resolver_identity(actor: str):
+    """A NON-bot git identity for a conversational resolution. Committing the curated
+    edit under this (NOT CAPTURE_IDENTITY) is what makes the resolution ride 'human
+    always wins': the next pass sees a human commit on the concept, treats it as
+    AUTHORITATIVE, and won't re-curate over it. The email is synthesized from the
+    connector name and is deliberately outside BOT_EMAILS so the classifier reads it
+    as human."""
+    name = (actor or "unknown").strip() or "unknown"
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "unknown"
+    return (name, f"{slug}@teammate.teamkb.local")
+
+
+def resolve_contradiction(repo: Path, ident: str, decision: str, *, text: str | None = None,
+                          note: str | None = None, actor: str = "unknown") -> dict:
+    """Resolve an open contradiction from the conversational surface — no git, no file
+    editing for the user (spec §13.4). `decision`:
+      - 'keep'    : the existing curated fact stands; the conflicting claim was wrong.
+      - 'replace' : the curated fact is updated to `text` (the corrected fact).
+    Either way the record is archived to contradictions/resolved/ (never rm), stamped
+    with who decided, the decision, and when. A 'replace' edit is committed under the
+    RESOLVER's own (non-bot) identity so it rides 'human always wins' — the next
+    curation pass treats the resolved fact as authoritative. Holds the secretary flock
+    so a resolution can never interleave with a curation pass."""
+    from store import _now_iso, commit, parse_md, render_md
+    from scrub import scrub
+    repo = Path(repo)
+    decision = (decision or "").strip().lower()
+    if decision not in RESOLVE_DECISIONS:
+        raise ValueError(f"decision must be one of {RESOLVE_DECISIONS}")
+    if decision == "replace" and not (text and text.strip()):
+        raise ValueError("decision 'replace' requires the corrected fact text")
+    actor = (actor or "unknown").strip() or "unknown"
+
+    try:
+        with secretary_lock(repo):
+            rec = _find_contradiction(repo, ident)
+            if rec is None:
+                raise ValueError(f"no open contradiction matching '{ident}' "
+                                 "(it may already be resolved)")
+            rmeta, rbody = parse_md(rec.read_text())
+            target = str(rmeta.get("target", rec.stem)).strip()
+            tgt = target if target.endswith(".md") else f"{target}.md"
+            tgt_rel = tgt if tgt.startswith("curated/") else f"curated/{tgt}"
+
+            curated_changed = False
+            if decision == "replace":
+                cur = repo / tgt_rel
+                if cur.exists():
+                    cmeta, _ = parse_md(cur.read_text())
+                else:                       # disputed concept missing -> create it
+                    cmeta = {"type": DEFAULT_TYPE,
+                             "title": Path(tgt_rel).stem.replace("-", " ")}
+                cmeta["timestamp"] = _now_iso()
+                cur.parent.mkdir(parents=True, exist_ok=True)
+                cur.write_text(render_md(cmeta, scrub(text.strip())))
+                curated_changed = True
+
+            # archive the record (git mv -> resolved/, never rm), stamped with the call
+            (repo / CONTRA_RESOLVED).mkdir(parents=True, exist_ok=True)
+            rel, dest_rel = str(rec.relative_to(repo)), f"{CONTRA_RESOLVED}/{rec.name}"
+            _git(repo, "mv", rel, dest_rel, check=False)
+            dest = repo / dest_rel
+            if not dest.exists():            # untracked record -> plain move
+                rec.rename(dest)
+            rmeta["status"] = "resolved"
+            rmeta["resolved_by"] = actor
+            rmeta["decision"] = decision
+            rmeta["decided_at"] = _now_iso()
+            if note and note.strip():
+                rmeta["resolution_note"] = scrub(note.strip())
+            dest.write_text(render_md(rmeta, rbody))
+
+            if curated_changed:
+                generate_index(repo)         # keep the OKF index current with the edit
+
+            sha = commit(repo, f"resolve: {decision} {tgt} [{actor}]",
+                         _resolver_identity(actor))
+            push_mirror(repo)
+            return {"status": "resolved", "decision": decision, "target": tgt,
+                    "record": rec.name, "actor": actor, "commit": sha,
+                    "curated_updated": curated_changed}
+    except SecretaryBusy:
+        return {"status": "busy", "reason": "curation_in_progress"}
+
+
 def _represented(repo: Path, raw_rel: str, target_text: str) -> bool:
     """Is the gist of a raw fact present in `target_text`? Majority of the fact title's
     significant (len>3) tokens must appear. Verifies a fact actually lives somewhere
@@ -433,17 +578,11 @@ def run_pass(repo: Path | None = None, model: str | None = None,
              agent=_run_agent) -> dict:
     repo = Path(repo or KB_REPO)
     model = model or model_id(repo)
-    lock_path = repo / ".git" / "secretary.lock"
-    lock = open(lock_path, "w")
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+        with secretary_lock(repo):
+            return _run_pass_locked(repo, model, max_blast, timeout, agent)
+    except SecretaryBusy:
         return {"status": "skipped", "reason": "already_running"}
-    try:
-        return _run_pass_locked(repo, model, max_blast, timeout, agent)
-    finally:
-        fcntl.flock(lock, fcntl.LOCK_UN)
-        lock.close()
 
 
 def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:

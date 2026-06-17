@@ -24,7 +24,7 @@ import config
 from boot_check import auth_probe
 from mcp_endpoint import build_router
 from recall import recall as recall_agent
-from secretary import run_pass
+from secretary import contradiction_records, resolve_contradiction, run_pass
 from store import GitStore, _git
 from viewer.generator import generate_html
 
@@ -60,6 +60,34 @@ class Handlers:
         r = await asyncio.to_thread(self.store.supersede, fact_id, by, attribution)
         tail = f", replaced by {by}" if by else ""
         return f"Superseded \"{r['title']}\" (id {fact_id}){tail}. Moved to _superseded/ (not deleted)."
+
+    async def contradictions(self) -> str:
+        recs = await asyncio.to_thread(contradiction_records, self.repo)
+        if not recs:
+            return "No open contradictions — the knowledge base has no unresolved disputes."
+        out = [f"{len(recs)} open contradiction(s) awaiting a decision:"]
+        for r in recs:
+            who = ", ".join(map(str, r["sources"])) if r["sources"] else "unknown"
+            out.append(
+                f"\n• id: {r['id']}  (disputed concept: {r['target']}; raised by: {who})\n"
+                f"{r['body']}\n"
+                f"  → resolve with: resolve(id=\"{r['id']}\", decision=\"keep\" or "
+                f"\"replace\", correction=…)")
+        return "\n".join(out)
+
+    async def resolve(self, ident, decision, correction, note, attribution) -> str:
+        try:
+            r = await asyncio.to_thread(resolve_contradiction, self.repo, ident, decision,
+                                        text=correction, note=note, actor=attribution)
+        except ValueError as e:
+            return f"Could not resolve: {e}"
+        if r["status"] == "busy":
+            return "The brain is curating right now — re-run resolve in a few seconds."
+        verb = ("updated the curated fact" if r["curated_updated"]
+                else "kept the existing curated fact")
+        return (f"Resolved the dispute on \"{r['target']}\": {verb} (decided by "
+                f"{r['actor']}). The contradiction is closed and archived to "
+                f"contradictions/resolved/ as an audit trail.")
 
 
 KB_REPO = config.KB_REPO
