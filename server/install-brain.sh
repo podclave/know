@@ -213,14 +213,19 @@ cat <<EOF
 
       $BASE_URL/<your-name>/
 
-  RECOMMENDED — Claude Code plugin (one install: tools + /know: commands + capture):
-      claude plugin marketplace add <owner>/know   # the published 'know' repo (or a local path)
-      claude plugin install know@know --config brain_mcp_url="$BASE_URL/<your-name>/"
-      claude plugin enable know@know
-    Your URL goes to Claude Code secure storage (never committed). For a team repo,
-    commit .claude/settings.json with extraKnownMarketplaces + "enabledPlugins":
-    {"know@know":true} + permissions.allow for the READ tools
-    (mcp__plugin_know_know__recall / __list / __contradictions) — auto-enables
+  RECOMMENDED — Claude Code plugin (one install: tools + /know: commands + capture).
+  Install SCOPED to the folder you want it in — NOT the default 'user' scope, which
+  enables the brain in EVERY folder you open:
+      cd /path/to/your/project
+      claude plugin marketplace add podclave/know --scope local
+      claude plugin install know@know --scope local --config brain_mcp_url="$BASE_URL/<your-name>/"
+      claude plugin enable know@know --scope local
+    --scope local = this folder only, just you (.claude/settings.local.json, gitignored);
+    your URL goes to secure storage, never a settings file. Wrong (user) scope already?
+    Undo: claude plugin uninstall know@know && claude plugin marketplace remove know.
+    TEAM repo: use --scope project (or commit .claude/settings.json with
+    extraKnownMarketplaces + "enabledPlugins":{"know@know":true} + permissions.allow for
+    the READ tools mcp__plugin_know_know__recall / __list / __contradictions) — auto-enables
     per-PROJECT on clone+trust; save/supersede/resolve still prompt.
 
   ALTERNATIVE — bare connector (no /know: commands or capture):

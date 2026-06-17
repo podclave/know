@@ -87,19 +87,28 @@ Each teammate has a personal URL `https://<brain>.sprites.app/mcp/<secret>/<your
 password).
 
 **Recommended — the `know` plugin** (one install: the connector + `/know:recall`,
-`/know:contradictions`, `/know:resolve` commands + optional capture):
+`/know:contradictions`, `/know:resolve` commands + optional capture). Install it **scoped
+to the folder you want it in** — never the default `user` scope, which would enable the
+brain in *every* folder you open:
 
 ```
-claude plugin marketplace add <owner>/know     # the published know repo (or a local path)
-claude plugin install know@know --config brain_mcp_url="https://<brain>.sprites.app/mcp/<secret>/<your-name>/"
-claude plugin enable know@know
+cd /path/to/your/project
+claude plugin marketplace add podclave/know --scope local
+claude plugin install know@know --scope local --config brain_mcp_url="https://<brain>.sprites.app/mcp/<secret>/<your-name>/"
+claude plugin enable know@know --scope local
 ```
 
-Your URL is stored in Claude Code's **secure storage** (never committed). For a team repo,
-commit `.claude/settings.json` so the brain auto-enables **per-project** on clone + trust:
+`--scope local` declares everything in `.claude/settings.local.json` (this folder, just
+you — gitignored); your URL goes to Claude Code's **secure storage**, never to any settings
+file. Already installed in the wrong (`user`) scope? Undo it with
+`claude plugin uninstall know@know` + `claude plugin marketplace remove know`, then redo
+with `--scope local`.
+
+For a **team** repo, use `--scope project` instead (or commit `.claude/settings.json`) so
+the brain auto-enables **per-project** for everyone on clone + trust:
 
 ```json
-{ "extraKnownMarketplaces": { "know": { "source": { "source": "github", "repo": "<owner>/know" } } },
+{ "extraKnownMarketplaces": { "know": { "source": { "source": "github", "repo": "podclave/know" } } },
   "enabledPlugins": { "know@know": true },
   "permissions": { "allow": ["mcp__plugin_know_know__recall","mcp__plugin_know_know__list","mcp__plugin_know_know__contradictions"] } }
 ```
