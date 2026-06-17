@@ -258,3 +258,59 @@ def test_cross_links_validated(repo):
     assert res["okf"]["broken_links"] == 2
     assert any("ghost.md" in b for b in res["broken_links"])
     assert any("/abs.md" in b for b in res["broken_links"])
+
+
+# --- structured-output manifest parsing (no claude; pure envelope parsing) ---
+import json as _json  # noqa: E402
+
+
+def _envelope(**kw):
+    base = {"type": "result", "subtype": "success", "is_error": False,
+            "result": "ok", "total_cost_usd": 0.012,
+            "usage": {"input_tokens": 100, "output_tokens": 20}}
+    base.update(kw)
+    return _json.dumps(base)
+
+
+def test_parse_envelope_uses_structured_output_and_cost():
+    env = _envelope(structured_output={
+        "incorporated_raw_ids": ["a", "b"], "contradictions_queued": 1, "summary": "did it"})
+    m = secretary._parse_envelope(0, env, "")
+    assert m["incorporated_raw_ids"] == ["a", "b"] and m["summary"] == "did it"
+    assert m["_cost_usd"] == 0.012 and m["_tokens"] == {"in": 100, "out": 20}
+
+
+def test_parse_envelope_nonzero_exit_is_error():
+    m = secretary._parse_envelope(1, "", "boom on stderr")
+    assert "_error" in m and "boom on stderr" in m["_error"]
+
+
+def test_parse_envelope_is_error_flag():
+    m = secretary._parse_envelope(0, _envelope(is_error=True, subtype="error_max_turns"), "")
+    assert "_error" in m and "error_max_turns" in m["_error"]
+
+
+def test_parse_envelope_unparseable_is_error():
+    assert "_error" in secretary._parse_envelope(0, "not json", "")
+
+
+def test_parse_envelope_salvages_from_result_when_no_structured_output():
+    env = _envelope(result='here {"incorporated_raw_ids": ["x"], "summary": "s"}')
+    m = secretary._parse_envelope(0, env, "")
+    assert m["incorporated_raw_ids"] == ["x"] and m["summary"] == "s"
+
+
+def test_run_pass_threads_cost_into_result_and_note(repo):
+    repo.save("f", "b", attribution="a")
+    ids = _raw_ids(repo)
+
+    def fake_agent(r, model, prompt, timeout):
+        (r / "curated" / "x.md").write_text("---\ntype: Fact\ntitle: X\n---\nbody\n")
+        return {"incorporated_raw_ids": ids, "summary": "with cost",
+                "_cost_usd": 0.0042, "_tokens": {"in": 50, "out": 10}}
+
+    res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    assert res["status"] == "committed" and res["cost_usd"] == 0.0042
+    body = subprocess.run(["git", "-C", str(repo.repo), "log", "-1", "--format=%b"],
+                          capture_output=True, text=True).stdout
+    assert "pass_usd=0.0042" in body

@@ -90,15 +90,30 @@ curated/index.md (a tool regenerates the index). Python moves the raw files you 
 treat their content as ground truth when deduping, and queue any conflict: {protected}
 - Do not invent facts. Only reorganize what is written.
 
-When done, output NOTHING but a single JSON object on the last line:
-{{"incorporated_raw_ids": ["<id>", ...], "queued_raw_ids": ["<id>", ...], \
-"deferred_raw_ids": ["<id>", ...], "contradictions_queued": <int>, \
-"summary": "<one sentence>"}}
-where:
+When done, report what you did as the structured-output manifest, with these fields:
 - incorporated_raw_ids = ids (from frontmatter) of raw facts now fully represented in curated/;
 - queued_raw_ids = ids of raw facts you filed into {contradictions} (now captured there);
-- deferred_raw_ids = ids you intentionally left in raw/ for a later pass.
+- deferred_raw_ids = ids you intentionally left in raw/ for a later pass;
+- contradictions_queued = how many conflicts you added to {contradictions};
+- summary = one sentence describing the pass.
 Python moves incorporated + queued raw files to _superseded/ (never deletes)."""
+
+# Forced structured output: `claude -p --json-schema` returns a schema-validated dict
+# in the envelope's `structured_output`, so the manifest is parsed cleanly instead of
+# regex-salvaged from free text. `summary` is the only hard requirement; the id arrays
+# default to [] when omitted (run_pass treats a missing/empty array as "none").
+MANIFEST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "incorporated_raw_ids": {"type": "array", "items": {"type": "string"}},
+        "queued_raw_ids": {"type": "array", "items": {"type": "string"}},
+        "deferred_raw_ids": {"type": "array", "items": {"type": "string"}},
+        "contradictions_queued": {"type": "integer"},
+        "summary": {"type": "string"},
+    },
+    "required": ["summary"],
+    "additionalProperties": False,
+}
 
 
 # --- deterministic git / classification helpers ------------------------------
@@ -298,26 +313,53 @@ def validate_links(repo: Path):
 
 
 # --- the agent invocation (monkeypatched in tests) ---------------------------
+def _parse_envelope(returncode: int, stdout: str, stderr: str) -> dict:
+    """Parse a `claude -p --output-format json` envelope into a manifest dict. Pure +
+    testable (no subprocess). The schema-validated manifest is the envelope's
+    `structured_output`; we also surface per-pass cost/tokens as private `_`-keys so
+    they reach the observables without changing the agent() injection contract. Errors
+    (non-zero exit, unparseable envelope, is_error) return {'_error': ...}."""
+    if returncode != 0:
+        return {"_error": f"secretary agent failed (exit {returncode}): {stderr.strip()[:300]}"}
+    try:
+        env = json.loads(stdout)
+    except ValueError:
+        return {"_error": "secretary agent: unparseable JSON envelope"}
+    if not isinstance(env, dict):
+        return {"_error": "secretary agent: unexpected envelope shape"}
+    if env.get("is_error"):
+        detail = env.get("subtype") or (env.get("result") or "")[:200] or "unknown error"
+        return {"_error": f"secretary agent error: {detail}"}
+    manifest = env.get("structured_output")
+    if not isinstance(manifest, dict):
+        # defensive fallback: salvage a JSON object from the result text
+        m = re.search(r"\{.*\}", env.get("result") or "", re.S)
+        try:
+            manifest = json.loads(m.group(0)) if m else {}
+        except ValueError:
+            manifest = {}
+    if not isinstance(manifest, dict):
+        manifest = {}
+    manifest["_cost_usd"] = env.get("total_cost_usd")
+    u = env.get("usage") or {}
+    manifest["_tokens"] = {"in": u.get("input_tokens"), "out": u.get("output_tokens")}
+    return manifest
+
+
 def _run_agent(repo: Path, model: str, prompt: str, timeout: int):
-    """Run the secretary `claude` with curated-only write tools. Returns parsed
-    manifest dict (best-effort) or {} on failure."""
+    """Run the secretary `claude` with curated-only write tools and forced structured
+    output (a schema-validated manifest). Returns the parsed manifest dict (with private
+    _cost_usd/_tokens) or {'_error': ...}."""
     env = dict(os.environ, **{GUARD_ENV: "1"})
     try:
         p = subprocess.run(
-            [claude_bin(), "-p", prompt, "--model", model, "--output-format", "text",
+            [claude_bin(), "-p", prompt, "--model", model,
+             "--output-format", "json", "--json-schema", json.dumps(MANIFEST_SCHEMA),
              "--allowed-tools", "Read", "Grep", "Glob", "Write", "Edit"],
             cwd=str(repo), capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return {"_error": "secretary agent timed out"}
-    if p.returncode != 0:
-        return {"_error": f"secretary agent failed (exit {p.returncode}): {p.stderr.strip()[:300]}"}
-    m = re.search(r"\{.*\}", p.stdout, re.S)
-    if not m:
-        return {}
-    try:
-        return json.loads(m.group(0))
-    except ValueError:
-        return {}
+    return _parse_envelope(p.returncode, p.stdout, p.stderr)
 
 
 # --- the pass ----------------------------------------------------------------
@@ -416,7 +458,9 @@ def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
     return {"status": "committed", "commit": new_head, "incorporated": len(incorporated),
             "moved_to_superseded": moved, "protected_skipped": sorted(protected),
             "concepts": _concept_count(repo), "raw_remaining": _count(repo, "raw"),
-            "okf": okf, "broken_links": links_broken, "summary": summary}
+            "okf": okf, "broken_links": links_broken,
+            "cost_usd": manifest.get("_cost_usd"), "tokens": manifest.get("_tokens"),
+            "summary": summary}
 
 
 def _observables(repo, base, incorporated, moved, manifest, raw_before, okf) -> str:
@@ -429,9 +473,16 @@ def _observables(repo, base, incorporated, moved, manifest, raw_before, okf) -> 
               ("capture" if ae in BOT_EMAILS else "human")
         by_identity[who] = by_identity.get(who, 0) + 1
     rot = ", ".join(f"{k}={v}" for k, v in sorted(by_identity.items())) or "none"
+    cost = manifest.get("_cost_usd")
+    tok = manifest.get("_tokens") or {}
+    cost_line = ""
+    if cost is not None:
+        cost_line = (f"\n[cost] pass_usd={cost:.4f} "
+                     f"tokens_in={tok.get('in')} tokens_out={tok.get('out')}")
     return (f"[secretary observables] incorporated={incorporated} promoted_raw={moved} "
             f"contradictions_queued={manifest.get('contradictions_queued', 0)} "
             f"raw_backlog_before={raw_before}\n"
             f"[okf] concepts={okf['concepts']} graph_links={okf['links']} "
-            f"broken_links={okf['broken_links']} type_backfilled={okf['type_backfilled']}\n"
+            f"broken_links={okf['broken_links']} type_backfilled={okf['type_backfilled']}"
+            f"{cost_line}\n"
             f"commits_since_last_pass_by_identity: {rot}")

@@ -43,8 +43,16 @@ it.** That split is the whole design — a weak model's judgment must never be a
 clobber a human edit, delete a fact, or run away across the repo.
 
 - The **agent** (judgment) may write ONLY to `curated/` and `CONTRADICTIONS.md`; it has
-  no Bash, so it can't `rm` or `git`. It reports a manifest of which raw ids it
-  incorporated/queued.
+  no Bash, so it can't `rm` or `git`. It runs via `claude -p --output-format json
+  --json-schema <MANIFEST_SCHEMA>`, so it reports a **schema-validated manifest** (which
+  raw ids it incorporated/queued/deferred) in the envelope's `structured_output` — parsed
+  cleanly by `_parse_envelope()` rather than regex-salvaged from free text. The same
+  envelope carries `total_cost_usd` + token `usage`, which land in the per-pass
+  observables note (`[cost] pass_usd=… tokens_in/out=…`) and the `run_pass` result. We
+  stayed on the CLI (not the `claude-agent-sdk`) deliberately: `--output-format json` is
+  the stable scripting surface and doesn't disturb the `claude update` / version-pin
+  lifecycle, while the SDK bundles its own CLI. (Recall stays `--output-format text` — it
+  returns prose, not a manifest.)
 - **Python** (safety), after the agent runs, regardless of what the agent did:
   - **never rm** — `enforce_whitelist()` reverts any agent change outside that
     write-whitelist (incl. anything it touched under `raw/`/`_superseded/`); the only
