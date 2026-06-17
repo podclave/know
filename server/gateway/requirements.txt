@@ -3,3 +3,6 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 httpx==0.28.1
+# frontmatter is now an OKF-conformant YAML block (consumed by other OKF tools),
+# so parse/emit it with a real YAML lib rather than a hand-rolled parser.
+pyyaml==6.0.2

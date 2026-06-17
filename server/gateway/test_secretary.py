@@ -18,7 +18,9 @@ def repo(tmp_path):
     s = GitStore(tmp_path / "kb")
     s.ensure_layout()
     (s.repo / "CLAUDE.md").write_text("# methodology\n- model: test\n")
-    (s.repo / "INDEX").write_text("# INDEX\n")
+    # seed curated/index.md via the same generator the pass uses, so an empty pass
+    # regenerates identical content (stays a true noop)
+    secretary.generate_index(s.repo)
     subprocess.run(["git", "-C", str(s.repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(s.repo), "-c", "user.name=seed",
                     "-c", "user.email=" + config.CAPTURE_IDENTITY[1],
@@ -28,6 +30,11 @@ def repo(tmp_path):
 
 def _raw_ids(s):
     return [parse_md(f.read_text())[0]["id"] for f in sorted((s.repo / "raw").glob("*.md"))]
+
+
+def concepts(repo):
+    """Curated concept files, excluding the reserved OKF index.md."""
+    return [f for f in sorted((repo / "curated").glob("*.md")) if f.name != "index.md"]
 
 
 def human_commit(repo, relpath, content, msg="human edit"):
@@ -52,8 +59,9 @@ def test_promotes_raw_moves_to_superseded_commits_as_secretary(repo):
 
     def fake_agent(r, model, prompt, timeout):
         (r / "curated").mkdir(exist_ok=True)
-        (r / "curated" / "infra.md").write_text("# Infra\n- Gateway: Kong:8000\n- DB: Postgres 16\n")
-        (r / "INDEX").write_text("# INDEX\n- Infra\n")
+        (r / "curated" / "infra.md").write_text(
+            "---\ntype: Architecture\ntitle: Infra\ndescription: core infra\n---\n"
+            "Gateway: Kong:8000. DB: Postgres 16.\n")
         return {"incorporated_raw_ids": ids, "contradictions_queued": 0, "summary": "folded infra"}
 
     res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
@@ -63,6 +71,8 @@ def test_promotes_raw_moves_to_superseded_commits_as_secretary(repo):
     assert len(list((repo.repo / "_superseded").glob("*.md"))) == 2
     assert not list((repo.repo / "raw").glob("*.md"))
     assert log_authors(repo.repo)[0] == config.SECRETARY_IDENTITY[1]
+    # OKF: index.md regenerated and lists the concept
+    assert "Infra" in (repo.repo / "curated" / "index.md").read_text()
 
 
 # --- never rm: agent deleting a raw file is reverted --------------------------
@@ -119,7 +129,7 @@ def test_blast_radius_bail(repo):
     assert res["status"] == "bailed" and res["reason"] == "blast_radius_exceeded"
     # nothing committed, working tree clean
     assert log_authors(repo.repo) == before
-    assert not list((repo.repo / "curated").glob("*.md"))
+    assert not concepts(repo.repo)
 
 
 # --- contradiction queue -----------------------------------------------------
@@ -186,3 +196,65 @@ def test_agent_error_is_clean_noop(repo):
     res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
     assert res["status"] == "error"
     assert list((repo.repo / "raw").glob("*.md"))  # raw untouched
+
+
+# --- OKF conformance: type is guaranteed even if the agent omits it ----------
+def test_missing_type_is_backfilled_for_conformance(repo):
+    repo.save("f", "b", attribution="a")
+    ids = _raw_ids(repo)
+
+    def fake_agent(r, model, prompt, timeout):
+        # agent omits the REQUIRED type field
+        (r / "curated" / "thing.md").write_text(
+            "---\ntitle: A thing\ndescription: x\n---\nbody\n")
+        return {"incorporated_raw_ids": ids, "summary": "no type"}
+
+    res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    assert res["status"] == "committed"
+    meta, _ = parse_md((repo.repo / "curated" / "thing.md").read_text())
+    assert meta.get("type")  # backfilled -> bundle conforms
+    assert res["okf"]["type_backfilled"] == 1
+
+
+# --- OKF index.md generated, grouped by type ---------------------------------
+def test_index_generated_grouped_by_type(repo):
+    repo.save("a", "x", attribution="u")
+    repo.save("b", "y", attribution="u")
+    ids = _raw_ids(repo)
+
+    def fake_agent(r, model, prompt, timeout):
+        (r / "curated" / "gw.md").write_text(
+            "---\ntype: Architecture\ntitle: Gateway\ndescription: the gw\n---\nKong\n")
+        (r / "curated" / "db-choice.md").write_text(
+            "---\ntype: Decision\ntitle: DB choice\ndescription: postgres\n---\nPostgres\n")
+        return {"incorporated_raw_ids": ids, "summary": "two concepts"}
+
+    secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    idx = (repo.repo / "curated" / "index.md").read_text()
+    assert 'okf_version: "0.1"' in idx
+    assert "## Architecture" in idx and "## Decision" in idx
+    assert "[Gateway](gw.md)" in idx and "[DB choice](db-choice.md)" in idx
+
+
+# --- OKF cross-links: valid links pass, broken links are reported ------------
+def test_cross_links_validated(repo):
+    repo.save("a", "x", attribution="u")
+    ids = _raw_ids(repo)
+
+    def fake_agent(r, model, prompt, timeout):
+        # gw links to db (valid sibling) and to a nonexistent concept + an absolute link
+        (r / "curated" / "gw.md").write_text(
+            "---\ntype: Architecture\ntitle: Gateway\n---\n"
+            "Fronts the [database](db.md). Also see [ghost](ghost.md) and "
+            "[bad](/abs.md).\n")
+        (r / "curated" / "db.md").write_text(
+            "---\ntype: Architecture\ntitle: DB\n---\nPostgres.\n")
+        return {"incorporated_raw_ids": ids, "summary": "linked"}
+
+    res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    assert res["status"] == "committed"
+    # one valid link (db.md), two broken (ghost.md missing, /abs.md absolute)
+    assert res["okf"]["links"] == 3
+    assert res["okf"]["broken_links"] == 2
+    assert any("ghost.md" in b for b in res["broken_links"])
+    assert any("/abs.md" in b for b in res["broken_links"])

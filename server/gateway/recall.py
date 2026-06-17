@@ -24,12 +24,13 @@ RECALL_PROMPT = """Your ONLY job is to answer a recall query over this team know
 searching the files in this repository. Do NOT take any other action.
 
 The knowledge base layout:
-- curated/ and INDEX — the polished, deduped facts. SEARCH HERE FIRST.
+- curated/ — the polished, deduped facts (an OKF bundle; curated/index.md maps it and \
+concepts cross-link each other). SEARCH HERE FIRST.
 - raw/ — append-only raw captures. Fall through to here only if curated/ doesn't answer it.
 - _superseded/ — retired facts. IGNORE these; they are outdated.
 
-Each fact file has YAML frontmatter (title/author/date/aliases) and a body. Use \
-Grep and Read to find facts relevant to the query. Return the relevant fact \
+Each fact file has YAML frontmatter (type/title/description/tags/timestamp) and a body. \
+Use Grep and Read to find facts relevant to the query. Return the relevant fact \
 content concisely, in your own words where helpful, and cite the fact titles.
 
 Honesty rules (critical):

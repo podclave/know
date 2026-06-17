@@ -67,14 +67,16 @@ TOOLS = [
        "call: a short descriptive title plus the fact in the body.",
        {"title": _STR("Short descriptive title for the fact"),
         "body": _STR("The fact itself — specific and self-contained"),
-        "aliases": _ARR("Optional alternate names/keywords this fact should be findable by"),
+        "type": _STR("Kind of fact: Fact, Decision, Convention, Gotcha, Runbook, "
+                     "Architecture, or Reference (default Fact)"),
+        "tags": _ARR("Optional keywords/categories this fact should be findable by"),
         "source": _STR("Optional provenance note (e.g. 'from the architecture doc', 'decided in standup')")},
        required=["title", "body"]),
     _t("list",
        "List facts currently in the knowledge base (ids + titles). Pass an "
        "optional filter substring to narrow it. Use to see what the brain "
        "already knows, or to find the id of a fact you want to supersede.",
-       {"filter": _STR("Optional case-insensitive substring to match titles/aliases")}),
+       {"filter": _STR("Optional case-insensitive substring to match titles/tags")}),
     _t("supersede",
        "Retire a fact that is now wrong or outdated — optionally noting the fact "
        "that replaces it. Never deletes: the old fact is moved aside so history "
@@ -118,8 +120,8 @@ async def call_tool(name: str, args: dict, attribution: str, handlers):
     if name == "save":
         return await handlers.save(
             title=_req_str(args, "title"), body=_req_str(args, "body"),
-            aliases=_norm_list(args.get("aliases")), source=_opt_str(args, "source"),
-            attribution=attribution)
+            type=_opt_str(args, "type"), tags=_norm_list(args.get("tags")),
+            source=_opt_str(args, "source"), attribution=attribution)
     if name == "list":
         return await handlers.list(_opt_str(args, "filter"))
     if name == "supersede":

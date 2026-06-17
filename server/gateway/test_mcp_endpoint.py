@@ -21,8 +21,8 @@ class FakeHandlers:
         self.calls.append(("recall", query, attribution))
         return f"recall-result:{query}"
 
-    async def save(self, title, body, aliases, source, attribution):
-        self.calls.append(("save", title, body, aliases, source, attribution))
+    async def save(self, title, body, type, tags, source, attribution):
+        self.calls.append(("save", title, body, type, tags, source, attribution))
         return {"status": "saved", "id": "deadbeef"}
 
     async def list(self, filt):
@@ -150,9 +150,10 @@ def test_recall_dispatches_with_attribution(harness):
 
 def test_save_dispatches_full_args(harness):
     client, h = harness
-    call(client, "save", {"title": "Gateway", "body": "We use Kong",
-                          "aliases": "kong, api gw", "source": "the doc"})
-    assert h.calls[-1] == ("save", "Gateway", "We use Kong", ["kong", "api gw"], "the doc", NAME)
+    call(client, "save", {"title": "Gateway", "body": "We use Kong", "type": "Architecture",
+                          "tags": "kong, api gw", "source": "the doc"})
+    assert h.calls[-1] == ("save", "Gateway", "We use Kong", "Architecture",
+                           ["kong", "api gw"], "the doc", NAME)
 
 
 def test_save_requires_title_and_body(harness):

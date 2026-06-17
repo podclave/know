@@ -23,17 +23,24 @@ def _log_authors(repo):
 
 def test_save_writes_raw_file_committed_as_capture(store):
     r = store.save("Our gateway is Kong", "We front all traffic with Kong.",
-                   attribution="alice")
+                   type="Architecture", attribution="alice")
     assert r["status"] == "saved"
     f = store.repo / r["path"]
     assert f.exists() and f.parent.name == "raw"
     meta, body = parse_md(f.read_text())
     assert meta["title"] == "Our gateway is Kong"
+    assert meta["type"] == "Architecture"     # OKF required field
     assert meta["author"] == "alice"
-    assert meta["id"] == r["id"]
+    assert meta["timestamp"] and meta["id"] == r["id"]
     assert "Kong" in body
     # committed under the reserved capture identity (the classifier keys on this)
     assert _log_authors(store.repo)[0] == config.CAPTURE_IDENTITY[1]
+
+
+def test_save_defaults_type_to_fact(store):
+    r = store.save("plain", "a plain fact", attribution="x")
+    meta, _ = parse_md((store.repo / r["path"]).read_text())
+    assert meta["type"] == "Fact"
 
 
 def test_save_scrubs_secrets(store):
@@ -52,7 +59,7 @@ def test_save_empty_body_raises(store):
 
 
 def test_list_returns_saved_facts(store):
-    store.save("Alpha fact", "body a", aliases=["a1"], attribution="alice")
+    store.save("Alpha fact", "body a", tags=["a1"], attribution="alice")
     store.save("Beta fact", "body b", attribution="bob")
     r = store.list()
     assert r["count"] == 2
@@ -61,11 +68,11 @@ def test_list_returns_saved_facts(store):
     assert all(f["status"] == "raw" for f in r["facts"])
 
 
-def test_list_filter_matches_title_and_aliases(store):
-    store.save("Gateway config", "x", aliases=["kong"], attribution="a")
+def test_list_filter_matches_title_and_tags(store):
+    store.save("Gateway config", "x", tags=["kong"], attribution="a")
     store.save("Database choice", "y", attribution="a")
     assert {f["title"] for f in store.list("gateway")["facts"]} == {"Gateway config"}
-    assert {f["title"] for f in store.list("kong")["facts"]} == {"Gateway config"}  # alias hit
+    assert {f["title"] for f in store.list("kong")["facts"]} == {"Gateway config"}  # tag hit
     assert {f["title"] for f in store.list("database")["facts"]} == {"Database choice"}
 
 
@@ -89,10 +96,19 @@ def test_supersede_unknown_id_raises(store):
 
 
 def test_render_parse_roundtrip():
-    meta = {"id": "ab12", "title": "T", "author": "x", "surface": "mcp",
-            "date": "2026-06-17T00:00:00Z", "aliases": ["one", "two"], "source": "doc"}
+    meta = {"type": "Decision", "title": "T", "description": "one-liner",
+            "tags": ["one", "two"], "timestamp": "2026-06-17T00:00:00Z",
+            "author": "x", "surface": "mcp", "source": "doc", "id": "ab12"}
     text = render_md(meta, "the body\n\nmore")
     m2, body = parse_md(text)
-    assert m2["id"] == "ab12" and m2["title"] == "T"
-    assert m2["aliases"] == ["one", "two"]
+    assert m2["type"] == "Decision" and m2["title"] == "T"
+    assert m2["tags"] == ["one", "two"]
+    assert m2["timestamp"] == "2026-06-17T00:00:00Z" and m2["id"] == "ab12"
     assert body.strip() == "the body\n\nmore"
+
+
+def test_render_emits_okf_field_order():
+    """type/title/description/tags/timestamp lead; extensions follow (OKF order)."""
+    text = render_md({"id": "z", "type": "Fact", "title": "T", "timestamp": "t"}, "b")
+    keys = [ln.split(":")[0] for ln in text.splitlines() if ":" in ln and not ln.startswith("-")]
+    assert keys.index("type") < keys.index("title") < keys.index("timestamp") < keys.index("id")

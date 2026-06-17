@@ -23,7 +23,7 @@ installer). The KB data repo (`~/teamkb-kb` by default) is the truth.
   commits via the **env-pinned identity wrapper** (`-c user.email=…` per invocation,
   never a clonable gitconfig). `supersede` moves to `_superseded/` (never `rm`).
 - **`recall.py`** — `recall(query)` spawns a cheap `claude -p` with read-only file
-  tools (`Read`/`Grep`/`Glob`) in the repo; curated/+INDEX first, raw/ on a miss. The
+  tools (`Read`/`Grep`/`Glob`) in the repo; the `curated/` OKF bundle first, raw/ on a miss. The
   §5.5 observables (empty-brain honesty, curated-K-vs-raw-M count, loud auth-invalid
   message) are computed **deterministically in Python**, not left to the model.
 - **`secretary.py`** — the curator (see safety model below).
@@ -42,9 +42,9 @@ A cheap model curates; **deterministic Python enforces every safety invariant ar
 it.** That split is the whole design — a weak model's judgment must never be able to
 clobber a human edit, delete a fact, or run away across the repo.
 
-- The **agent** (judgment) may write ONLY to `curated/`, `INDEX`, and
-  `CONTRADICTIONS.md`; it has no Bash, so it can't `rm` or `git`. It reports a manifest
-  of which raw ids it incorporated/queued.
+- The **agent** (judgment) may write ONLY to `curated/` and `CONTRADICTIONS.md`; it has
+  no Bash, so it can't `rm` or `git`. It reports a manifest of which raw ids it
+  incorporated/queued.
 - **Python** (safety), after the agent runs, regardless of what the agent did:
   - **never rm** — `enforce_whitelist()` reverts any agent change outside that
     write-whitelist (incl. anything it touched under `raw/`/`_superseded/`); the only
@@ -65,6 +65,35 @@ clobber a human edit, delete a fact, or run away across the repo.
 no model). Quality — does it organize a messy repo well — is verified live, separately
 (it does: merges paraphrase dupes, queues contradictions, protects human facts,
 idempotent on a second pass).
+
+## OKF — `curated/` is an Open Knowledge Format bundle
+
+[OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+is Google's vendor-neutral spec for the "LLM-wiki" pattern — markdown concept docs with
+YAML frontmatter, an `index.md`, and cross-links. teamkb was ~90% this shape already;
+conforming costs nothing and means the curated bundle is readable by any OKF tool (e.g.
+the OKF static graph visualizer) with zero lock-in and no GCP dependency.
+
+Mapping: **`curated/` is the bundle** (flat); `raw/`, `_superseded/`, `CLAUDE.md`,
+`CONTRADICTIONS.md` are teamkb-internal, outside it. Each concept doc carries
+`type` (OKF's one required field) / `title` / `description` / `tags` / `timestamp` plus
+teamkb extension keys (`author`/`surface`/`source`/`id`, which OKF preserves). Frontmatter
+is real YAML (`pyyaml`) since other tools parse it.
+
+Same split as the safety model — **the agent authors judgment, Python guarantees the
+invariant:**
+- The agent writes conformant concept docs and **cross-links** them, following Google's
+  own enrichment-agent rules (from their `enrichment_instruction.md`): link in prose when
+  naturally referencing another concept; file-relative paths only (never start with `/`);
+  only link concepts that exist; one link per mention; no links in headings/code/self.
+- Python (`secretary.py`) then **guarantees conformance regardless of the model**:
+  `backfill_types()` sets a default `type` on any concept missing one; `generate_index()`
+  deterministically rebuilds `curated/index.md` (grouped by `type`, with `okf_version`);
+  `validate_links()` checks every intra-bundle link resolves and reports broken/absolute
+  ones in the pass observables (OKF tolerates broken links, so this reports, not fails).
+
+Verified live: a real curation pass over 5 relatable facts produced 5 conformant concepts
+with 9 resolving cross-links, 0 broken; idempotent on re-run.
 
 ## Lessons carried over from podbrain (pre-empted, not rediscovered)
 

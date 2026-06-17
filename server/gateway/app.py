@@ -39,8 +39,8 @@ class Handlers:
     async def recall(self, query: str, attribution: str) -> str:
         return await recall_agent(query, repo=self.repo)
 
-    async def save(self, title, body, aliases, source, attribution) -> str:
-        r = await asyncio.to_thread(self.store.save, title, body, aliases, source, attribution)
+    async def save(self, title, body, type, tags, source, attribution) -> str:
+        r = await asyncio.to_thread(self.store.save, title, body, type, tags, source, attribution)
         note_write()  # tail-of-write curation trigger (§10 lifecycle)
         return f"Saved \"{r['title']}\" to the team brain (id {r['id']})."
 
@@ -49,7 +49,7 @@ class Handlers:
         if not r["facts"]:
             scope = f" matching \"{filt}\"" if filt else ""
             return f"No facts{scope} in the knowledge base yet."
-        lines = [f"{f['id']}  [{f['status']}]  {f['title']}" for f in r["facts"]]
+        lines = [f"{f['id']}  [{f['status']}/{f['type']}]  {f['title']}" for f in r["facts"]]
         head = f"{r['count']} fact(s)" + (f" matching \"{filt}\"" if filt else "") + ":"
         return head + "\n" + "\n".join(lines)
 

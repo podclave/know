@@ -40,9 +40,16 @@ installed or cloned on your machine. Hooking in is adding **one URL**.
   The `<name>` segment is self-asserted attribution stamped on saves.
 - **The brain authenticates to Anthropic with an API key** (static — no login that
   expires on a clock), scoped to the service only, never your interactive `claude`.
-- **Storage:** `raw/` (append-only capture) → `curated/` + `INDEX` (the polished read
-  path the secretary owns) → `_superseded/` (retired; nothing is ever `rm`'d).
-  Methodology lives in the repo's own [`CLAUDE.md`](server/kb-template/CLAUDE.md).
+- **Storage:** `raw/` (append-only capture) → `curated/` (the polished read path the
+  secretary owns) → `_superseded/` (retired; nothing is ever `rm`'d). Methodology lives
+  in the repo's own [`CLAUDE.md`](server/kb-template/CLAUDE.md).
+- **`curated/` is an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+  (OKF) bundle** — Google's vendor-neutral "LLM-wiki" spec: markdown concept docs with
+  YAML frontmatter (`type`/`title`/`description`/`tags`/`timestamp`), an `index.md`, and
+  inline markdown cross-links forming a knowledge graph. The secretary writes the docs +
+  links; deterministic code guarantees conformance (backfills `type`, regenerates the
+  index, validates links). So the curated brain can be read by any OKF tool — e.g.
+  rendered as an interactive graph by the OKF static visualizer — with zero lock-in.
 
 ## Install (stand up a brain)
 

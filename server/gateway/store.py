@@ -19,6 +19,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
+
 from config import CAPTURE_IDENTITY, MIRROR_REMOTE
 from scrub import scrub
 
@@ -67,37 +69,44 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-_FM_KEYS = ("id", "title", "author", "surface", "date", "aliases", "source")
+# OKF-recommended fields first (type required; resource omitted — teamkb facts are
+# rarely resource-bound), then teamkb extension keys (OKF allows + preserves these).
+_FM_ORDER = ("type", "title", "description", "resource", "tags", "timestamp",
+             "author", "surface", "source", "id")
 
 
 def render_md(meta: dict, body: str) -> str:
-    lines = ["---"]
-    for k in _FM_KEYS:
+    """Emit an OKF concept doc: a YAML frontmatter block + markdown body. Ordered,
+    block-style YAML (matches the OKF reference bundles) so any OKF tool can parse it."""
+    fm = {}
+    for k in _FM_ORDER:
         v = meta.get(k)
-        if v in (None, "", []):
-            continue
-        if isinstance(v, (list, tuple)):
-            v = ", ".join(str(x) for x in v)
-        lines.append(f"{k}: {v}")
-    lines.append("---")
-    return "\n".join(lines) + "\n\n" + body.strip() + "\n"
+        if v not in (None, "", []):
+            fm[k] = v
+    for k, v in meta.items():  # preserve any extra producer keys (OKF extensions)
+        if k not in fm and v not in (None, "", []):
+            fm[k] = v
+    block = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True,
+                           default_flow_style=False).strip()
+    return f"---\n{block}\n---\n\n{body.strip()}\n"
 
 
 def parse_md(text: str):
-    """Return (meta dict, body str). Tolerant of files with no frontmatter."""
-    meta, body = {}, text
-    if text.startswith("---"):
-        rest = text[3:].lstrip("\n")
-        end = rest.find("\n---")
-        if end != -1:
-            block = rest[:end]
-            body = rest[end + 4:].lstrip("\n")
-            for line in block.splitlines():
-                if ":" in line:
-                    k, v = line.split(":", 1)
-                    meta[k.strip()] = v.strip()
-    if isinstance(meta.get("aliases"), str):
-        meta["aliases"] = [a.strip() for a in meta["aliases"].split(",") if a.strip()]
+    """Return (meta dict, body str). Tolerant of files with no frontmatter and of
+    malformed YAML (returns {} meta rather than raising)."""
+    if not text.startswith("---"):
+        return {}, text
+    rest = text[3:].lstrip("\n")
+    end = rest.find("\n---")
+    if end == -1:
+        return {}, text
+    block, body = rest[:end], rest[end + 4:].lstrip("\n")
+    try:
+        meta = yaml.safe_load(block) or {}
+    except yaml.YAMLError:
+        meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
     return meta, body
 
 
@@ -132,18 +141,20 @@ class GitStore:
         return None, None
 
     # --- write tools ---------------------------------------------------------
-    def save(self, title, body, aliases=None, source=None, attribution="unknown",
-             surface="mcp") -> dict:
+    def save(self, title, body, type=None, tags=None, source=None,
+             attribution="unknown", surface="mcp") -> dict:
         self.ensure_layout()
         title = scrub(title.strip())
         body = scrub(body.strip())
         if not body:
             raise ValueError("empty fact body")
         fid = os.urandom(4).hex()
-        meta = {"id": fid, "title": title, "author": attribution,
-                "surface": surface, "date": _now_iso(),
-                "aliases": [scrub(a) for a in (aliases or [])],
-                "source": scrub(source) if source else None}
+        # `type` is OKF's one required field; default to Fact for cheap always-accept
+        # capture (the secretary refines it during curation).
+        meta = {"type": (type or "Fact").strip() or "Fact", "title": title,
+                "tags": [scrub(t) for t in (tags or [])], "timestamp": _now_iso(),
+                "author": attribution, "surface": surface,
+                "source": scrub(source) if source else None, "id": fid}
         rel = f"{RAW}/{_slug(title)}-{fid}.md"
         path = self.repo / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -161,15 +172,18 @@ class GitStore:
             if not d.is_dir():
                 continue
             for f in sorted(d.glob("*.md")):
+                if f.name == "index.md":  # OKF reserved file, not a concept
+                    continue
                 meta, _ = parse_md(f.read_text())
                 title = meta.get("title", f.stem)
-                aliases = meta.get("aliases") or []
+                tags = meta.get("tags") or []
                 if filt:
-                    hay = (title + " " + " ".join(aliases)).lower()
+                    hay = (title + " " + " ".join(map(str, tags))).lower()
                     if filt.lower() not in hay:
                         continue
                 out.append({"id": meta.get("id", ""), "title": title,
-                            "status": sub, "aliases": aliases})
+                            "status": sub, "type": meta.get("type", "Fact"),
+                            "tags": tags})
         return {"count": len(out), "facts": out}
 
     def supersede(self, fact_id, by=None, attribution="unknown") -> dict:

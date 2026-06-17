@@ -78,18 +78,19 @@ if [ ! -f "$SECRET_FILE" ]; then
 fi
 SECRET="$(cat "$SECRET_FILE")"
 
-# --- 6. init the KB data repo (raw/curated/_superseded/INDEX/CLAUDE.md) ------
+# --- 6. init the KB data repo (raw/, curated/=OKF bundle, _superseded/, CLAUDE.md) --
 if [ ! -d "$KB_REPO/.git" ]; then
   log "initializing KB data repo at $KB_REPO"
   mkdir -p "$KB_REPO"/{raw,curated,_superseded}
   git -C "$KB_REPO" init -q
-  for d in raw curated _superseded; do touch "$KB_REPO/$d/.gitkeep"; done
+  for d in raw _superseded; do touch "$KB_REPO/$d/.gitkeep"; done
   cp "$HERE/kb-template/CLAUDE.md" "$KB_REPO/CLAUDE.md"
-  printf '# INDEX\n\n_(empty — the secretary maintains this)_\n' > "$KB_REPO/INDEX"
+  # curated/ is the OKF bundle; seed its bundle-root index.md (the secretary owns it)
+  printf -- '---\nokf_version: "0.1"\n---\n\n# Knowledge base index\n\n_(empty — facts appear here as the secretary curates them)_\n' > "$KB_REPO/curated/index.md"
   printf '# Contradictions\n\n_(empty — the secretary queues human-resolvable conflicts here)_\n' > "$KB_REPO/CONTRADICTIONS.md"
   git -C "$KB_REPO" add -A
   git -C "$KB_REPO" -c user.name=teamkb-capture -c user.email=capture@teamkb.local \
-    commit -q -m "capture: init knowledge base"
+    commit -q -m "capture: init knowledge base (OKF bundle in curated/)"
 fi
 # record the resolved model + claude version onto the ONE config line (§5.2, §10.3)
 "$PYBIN" - "$KB_REPO/CLAUDE.md" "$MODEL" "$CLAUDE_VER" <<'PY'
