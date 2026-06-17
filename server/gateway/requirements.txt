@@ -1,0 +1,5 @@
+# teamkb gateway — pinned, minimal. FastAPI MCP transport + a git-markdown store
+# driven by claude -p agents. No doc-ingest deps (pymupdf/docx/pptx) — out of scope.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
