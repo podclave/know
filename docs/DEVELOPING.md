@@ -49,7 +49,7 @@ A cheap model curates; **deterministic Python enforces every safety invariant ar
 it.** That split is the whole design — a weak model's judgment must never be able to
 clobber a human edit, delete a fact, or run away across the repo.
 
-- The **agent** (judgment) may write ONLY to `curated/` and `CONTRADICTIONS.md`; it has
+- The **agent** (judgment) may write ONLY to `curated/` and `contradictions/`; it has
   no Bash, so it can't `rm` or `git`. It runs via the Agent SDK with a forced
   `output_format` JSON schema, so it reports a **schema-validated manifest** (which raw
   ids it incorporated/queued/deferred) in `ResultMessage.structured_output` — mapped by
@@ -62,14 +62,19 @@ clobber a human edit, delete a fact, or run away across the repo.
     raw mutation is Python's own `git mv` of incorporated/queued facts to `_superseded/`.
   - **a fact leaves `raw/` only when it's verifiably represented** — `_represented()`
     checks the raw fact's title tokens against the curated bundle (incorporated) or
-    `CONTRADICTIONS.md` (queued) using a FRESH `raw/` snapshot taken after the agent runs.
+    `contradictions/` (queued) using a FRESH `raw/` snapshot taken after the agent runs.
     Content-based, so it blocks a lying/empty manifest from moving uncurated facts AND
     self-heals facts already represented (a re-run, or a `save` that lands mid-pass as a
     `capture` commit) instead of leaving them duplicated in `raw/` + `curated/`.
   - **human always wins** — files touched by unreconciled HUMAN commits (author email
-    ≠ the two reserved bot identities) are in `protected`; the agent is told to skip
-    them and Python reverts them if it doesn't. A contradicting machine fact goes to
-    `CONTRADICTIONS.md`, never over the human (spec §13.4).
+    ≠ the two reserved bot identities) are in `protected`; the agent is told to skip them
+    and Python reverts them if it doesn't. A contradicting machine fact goes to a
+    structured `contradictions/<slug>.md` record, never over the human (spec §13.4).
+  - **contradiction dequeue** — `resolve_contradictions()`: when a human edits a curated
+    concept that a PRE-EXISTING open contradiction targets, the human has spoken, so the
+    record is closed (moved to `contradictions/resolved/`, never rm). A record filed in
+    the same pass isn't auto-closed (a pass-start snapshot gates this). Recall flags any
+    open record on the queried concept; `/wake` + the observables report the open count.
   - **blast-radius cap** — past N changed files the pass bails with a review note.
   - **optimistic concurrency** — if a human commit lands mid-pass (HEAD moved off the
     start ref R with a non-bot author), abort and defer to the next pass.
@@ -91,7 +96,7 @@ conforming costs nothing and means the curated bundle is readable by any OKF too
 the OKF static graph visualizer) with zero lock-in and no GCP dependency.
 
 Mapping: **`curated/` is the bundle** (flat); `raw/`, `_superseded/`, `CLAUDE.md`,
-`CONTRADICTIONS.md` are teamkb-internal, outside it. Each concept doc carries
+`contradictions/` are teamkb-internal, outside it. Each concept doc carries
 `type` (OKF's one required field) / `title` / `description` / `tags` / `timestamp` plus
 teamkb extension keys (`author`/`surface`/`source`/`id`, which OKF preserves). Frontmatter
 is real YAML (`pyyaml`) since other tools parse it.

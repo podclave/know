@@ -193,7 +193,9 @@ async def wake():
     except Exception as e:  # noqa: BLE001
         out["mirror_error"] = str(e)
 
-    # 3. curator liveness
+    # 3. curator liveness + the human-resolvable contradiction backlog
     age = await asyncio.to_thread(_last_secretary_age)
     out["last_curation_secs_ago"] = round(age) if age is not None else None
+    from secretary import open_contradictions
+    out["open_contradictions"] = len(open_contradictions(KB_REPO))
     return out

@@ -121,9 +121,10 @@ on (recall/save already work without it; web surfaces have no hook). Enable it a
 ## Editing the brain directly (power users)
 
 Clone the mirror, edit any fact, commit, push. The secretary detects your edit by git
-author and treats it as **authoritative** — it never clobbers a human edit, and a
-machine fact that contradicts yours goes to `CONTRADICTIONS.md` for you to resolve.
-Reconcile happens on the next `/wake` (≈ one heartbeat interval).
+author and treats it as **authoritative** — it never clobbers a human edit, and a machine
+fact that contradicts yours becomes an open record in `contradictions/` (recall flags it
+as disputed; `/wake` reports the open count). Editing the disputed fact **closes** the
+record automatically. Reconcile happens on the next `/wake` (≈ one heartbeat interval).
 
 ## Security note — the secret is in the URL
 

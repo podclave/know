@@ -20,6 +20,7 @@ The knowledge base layout:
 concepts cross-link each other). SEARCH HERE FIRST.
 - raw/ — append-only raw captures. Fall through to here only if curated/ doesn't answer it.
 - _superseded/ — retired facts. IGNORE these; they are outdated.
+- contradictions/ — OPEN, UNRESOLVED disputes (top-level *.md; ignore contradictions/resolved/).
 
 Each fact file has YAML frontmatter (type/title/description/tags/timestamp) and a body. \
 Use Grep and Read to find facts relevant to the query. Return the relevant fact \
@@ -31,6 +32,10 @@ Honesty rules (critical):
 knowledge base." Do NOT invent or infer facts that aren't written down.
 - If you find only loosely related material, return it but flag it as a partial / \
 low-confidence match. Never present a guess as an established team fact.
+- DISPUTES: check contradictions/ for an OPEN record on whatever your answer is about. \
+If one exists, you MUST prominently warn at the top that the fact is DISPUTED and \
+unresolved (summarize both sides) — never give a confident single answer when the brain \
+itself flags a pending conflict on it.
 
 QUERY: {query}"""
 

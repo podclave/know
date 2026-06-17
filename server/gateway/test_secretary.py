@@ -132,23 +132,57 @@ def test_blast_radius_bail(repo):
     assert not concepts(repo.repo)
 
 
-# --- contradiction queue -----------------------------------------------------
-def test_contradiction_queued_not_overwritten(repo):
-    human_commit(repo.repo, "curated/db.md", "# Database\nWe use Postgres.\n")
-    repo.save("db is mysql", "Actually the DB is MySQL now", attribution="alice")
-    ids = _raw_ids(repo)
+def _sec_commit(repo, msg="secretary: prior"):
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=sec",
+                    "-c", "user.email=" + config.SECRETARY_IDENTITY[1],
+                    "commit", "-q", "-m", msg], check=True)
+
+
+# --- contradiction queue: a conflict becomes a structured open record --------
+def test_contradiction_filed_as_structured_record_not_overwriting(repo):
+    human_commit(repo.repo, "curated/database.md",
+                 "---\ntype: Decision\ntitle: Database\n---\nWe use PostgreSQL 16.\n")
+    repo.save("Database is MySQL now", "The DB was migrated to MySQL 8", attribution="alice")
+    [rid] = _raw_ids(repo)
 
     def fake_agent(r, model, prompt, timeout):
-        # respects human file; files the conflict instead of overwriting
-        (r / "CONTRADICTIONS.md").write_text(
-            "## Database\n- curated: Postgres\n- raw(alice): MySQL\n")
-        return {"incorporated_raw_ids": ids, "contradictions_queued": 1, "summary": "queued db conflict"}
+        (r / "contradictions").mkdir(exist_ok=True)
+        (r / "contradictions" / "database.md").write_text(
+            "---\ntype: Contradiction\nstatus: open\ntarget: database.md\n---\n"
+            "Curated: PostgreSQL 16. Conflicting (alice): MySQL 8 migration.\n")
+        return {"queued_raw_ids": [rid], "contradictions_queued": 1, "summary": "queued db conflict"}
 
     res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
     assert res["status"] == "committed"
-    assert "Postgres" in (repo.repo / "curated" / "db.md").read_text()  # human untouched
-    assert (repo.repo / "CONTRADICTIONS.md").exists()
-    assert "MySQL" in (repo.repo / "CONTRADICTIONS.md").read_text()
+    assert "PostgreSQL 16" in (repo.repo / "curated" / "database.md").read_text()  # human untouched
+    assert (repo.repo / "contradictions" / "database.md").exists()
+    assert res["contradictions"]["open"] == 1
+    # the conflicting raw fact left the backlog (now captured in the record)
+    assert not list((repo.repo / "raw").glob("*.md"))
+
+
+# --- dequeue: a human edit to the disputed concept closes a PRE-EXISTING record ----
+def test_human_edit_closes_open_contradiction(repo):
+    # pre-existing curated fact + an open contradiction targeting it (a prior pass)
+    (repo.repo / "curated" / "database.md").write_text(
+        "---\ntype: Decision\ntitle: Database\n---\nPostgreSQL 16.\n")
+    (repo.repo / "contradictions" / "database.md").write_text(
+        "---\ntype: Contradiction\nstatus: open\ntarget: database.md\n---\nPostgres vs MySQL.\n")
+    _sec_commit(repo.repo, "secretary: prior pass with an open contradiction")
+    # the human now edits the disputed concept (resolving it their way)
+    human_commit(repo.repo, "curated/database.md",
+                 "---\ntype: Decision\ntitle: Database\n---\nPostgreSQL 16 — confirmed, no MySQL migration.\n")
+
+    def fake_agent(r, model, prompt, timeout):
+        return {"summary": "nothing new in raw"}
+
+    res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    assert res["status"] == "committed"
+    assert res["contradictions"]["resolved"] == 1 and res["contradictions"]["open"] == 0
+    assert not (repo.repo / "contradictions" / "database.md").exists()       # moved out of open
+    moved = repo.repo / "contradictions" / "resolved" / "database.md"
+    assert moved.exists() and "resolved" in moved.read_text()
 
 
 # --- optimistic concurrency: a human commit mid-pass defers ------------------

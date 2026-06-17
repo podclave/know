@@ -27,7 +27,8 @@ from scrub import scrub
 RAW = "raw"
 CURATED = "curated"
 SUPERSEDED = "_superseded"
-SUBDIRS = (RAW, CURATED, SUPERSEDED)
+CONTRADICTIONS = "contradictions"
+SUBDIRS = (RAW, CURATED, SUPERSEDED, CONTRADICTIONS)
 
 
 # --- low-level helpers -------------------------------------------------------
