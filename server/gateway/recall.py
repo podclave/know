@@ -1,24 +1,16 @@
 """Recall — a cheap-tier `claude` agent over the KB repo (spec §5).
 
-The lookup any Claude would do over a project, relocated server-side: spawn a
-`claude -p` with read-only file tools (Read/Grep/Glob) in the repo, curated/+INDEX
+The lookup any Claude would do over a project, relocated server-side: run a read-only
+agent (Read/Grep/Glob) over the repo via the Claude Agent SDK (see agent.py), curated/
 first and raw/ on a miss, and return relevant content. The §5.5 anti-silent-rot
-observables (curated-K vs raw-M counts, empty-brain honesty, auth-invalid loud
-message) are computed deterministically here — never left to the cheap model.
-
-Plumbing lifted from podbrain brain.py do_distill: model pin, --output-format
-text, recursion guard env, timeout, robust failure handling.
+observables (curated-K vs raw-M counts, empty-brain honesty, auth-invalid loud message)
+are computed deterministically here — never left to the cheap model.
 """
-import asyncio
-import os
 import re
 from pathlib import Path
 
-from config import KB_REPO, claude_bin, model_id
-
-# Recursion guard: the recall agent runs `claude`; this env marks the child so any
-# hook/agent that checks it bails instead of recursing (mirrors BRAIN_DISTILLER=1).
-GUARD_ENV = "TEAMKB_AGENT"
+from agent import RECALL_BUDGET_USD, collect
+from config import KB_REPO, model_id
 
 RECALL_PROMPT = """Your ONLY job is to answer a recall query over this team knowledge base by \
 searching the files in this repository. Do NOT take any other action.
@@ -43,30 +35,13 @@ low-confidence match. Never present a guess as an established team fact.
 QUERY: {query}"""
 
 
-async def _run_claude(prompt: str, model: str, cwd: str, timeout: int):
-    """Run `claude -p` read-only in the repo. Module-level so tests can monkeypatch.
-    Returns (returncode, stdout, stderr)."""
-    env = dict(os.environ, **{GUARD_ENV: "1"})
-    proc = await asyncio.create_subprocess_exec(
-        claude_bin(), "-p", prompt, "--model", model, "--output-format", "text",
-        "--allowed-tools", "Read", "Grep", "Glob",
-        cwd=cwd, env=env,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    try:
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
-        try:
-            proc.kill()
-        except ProcessLookupError:
-            pass
-        raise RuntimeError("recall timed out (the brain may be waking — try again)")
-    return proc.returncode, (out or b"").decode(errors="replace"), (err or b"").decode(errors="replace")
-
-
 def _counts(repo: Path):
     def n(sub):
         d = repo / sub
-        return len(list(d.glob("*.md"))) if d.is_dir() else 0
+        if not d.is_dir():
+            return 0
+        # exclude the reserved OKF index.md so an empty curated bundle reads as 0
+        return len([f for f in d.glob("*.md") if f.name != "index.md"])
     return n("curated"), n("raw")
 
 
@@ -80,15 +55,17 @@ async def recall(query: str, repo: Path | None = None, model: str | None = None,
                 "This is an empty brain, not a failed lookup. If you just learned "
                 "something durable, consider calling `save`.)")
     model = model or model_id(repo)
-    rc, out, err = await _run_claude(RECALL_PROMPT.format(query=query), model,
-                                     str(repo), timeout)
-    if rc != 0:
+    res = await collect(RECALL_PROMPT.format(query=query), cwd=repo, model=model,
+                        allowed_tools=["Read", "Grep", "Glob"], write=False,
+                        max_turns=20, budget=RECALL_BUDGET_USD, timeout=timeout)
+    if res.is_error:
         # Distinct, loud auth message (§5.5) vs a generic agent failure.
-        if re.search(r"auth|credential|api[\s_-]?key|401|unauthor|invalid x-api", err, re.I):
+        if re.search(r"auth|credential|api[\s_-]?key|401|unauthor|invalid x-api|forbidden",
+                     res.error, re.I):
             raise RuntimeError("brain auth invalid — the ANTHROPIC_API_KEY on the box "
                                "is missing/revoked/over-quota; recall is down until it's fixed")
-        raise RuntimeError(f"recall agent failed (exit {rc}): {err.strip()[:300]}")
-    text = out.strip() or "(No relevant facts found in the knowledge base.)"
+        raise RuntimeError(f"recall agent failed: {res.error[:300]}")
+    text = res.text or "(No relevant facts found in the knowledge base.)"
     # §5.5 count signal: a curated hit can still be incomplete if raw >> curated.
     if raw and (curated == 0 or raw > max(5, curated * 3)):
         text += (f"\n\n— recall signal: {curated} curated fact(s) vs ~{raw} raw "

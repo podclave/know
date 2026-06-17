@@ -4,7 +4,7 @@ Three DISTINCT checks the installer runs in order and refuses "green" on any
 failure — kept distinct so a deprecated model and a bad credential can't mask each
 other (spec §10.11):
   1. auth        — an auth-ONLY call (GET /v1/models) that fails only on auth.
-  2. version     — `claude` runtime >= floor AND matches the recorded version.
+  2. runtime     — the SDK's bundled CLI >= floor AND matches the recorded version.
   3. model       — the pinned model id still RESOLVES on the Models list (fails
                    loud when retired -> the known re-pin chore).
 
@@ -14,13 +14,13 @@ Also resolves the cheapest-tier (haiku) dated id at install time. Importable so
 Usage:
   python boot_check.py auth                         -> exit 0/1, prints status
   python boot_check.py resolve-model                -> prints the cheapest haiku id
+  python boot_check.py sdk-version                  -> prints the bundled CLI version
   python boot_check.py model-resolves <id>          -> exit 0/1
   python boot_check.py version <floor>              -> exit 0/1 (+ optional recorded)
   python boot_check.py check <floor> <model> [recorded_ver]   -> full ordered check
 """
 import os
 import re
-import subprocess
 import sys
 
 import httpx
@@ -81,14 +81,15 @@ def resolve_cheapest_haiku() -> str:
     return dated[-1] if dated else sorted(haikus)[-1]
 
 
-def claude_version() -> str | None:
+def sdk_cli_version() -> str | None:
+    """The Claude Code CLI version BUNDLED with the installed Agent SDK. This is the
+    agent runtime — pinned by the SDK version, native + Node-free, isolated from any
+    system `claude`. It's what recall/the secretary actually run on."""
     try:
-        out = subprocess.run(["claude", "--version"], capture_output=True,
-                             text=True, timeout=30).stdout
+        from claude_agent_sdk._cli_version import __cli_version__
+        return __cli_version__
     except Exception:  # noqa: BLE001
         return None
-    m = re.search(r"(\d+\.\d+\.\d+)", out)
-    return m.group(1) if m else None
 
 
 def _ver_tuple(v: str):
@@ -96,13 +97,13 @@ def _ver_tuple(v: str):
 
 
 def version_ok(floor: str, recorded: str | None = None) -> tuple[bool, str]:
-    cur = claude_version()
+    cur = sdk_cli_version()
     if not cur:
-        return False, "could not determine `claude` version"
+        return False, "could not determine the SDK's bundled CLI version (is claude-agent-sdk installed?)"
     if _ver_tuple(cur) < _ver_tuple(floor):
-        return False, f"claude {cur} is below the required floor {floor} (run `claude update`)"
+        return False, f"bundled CLI {cur} is below the required floor {floor} (bump claude-agent-sdk)"
     if recorded and cur != recorded:
-        return False, f"claude {cur} != the recorded/pinned version {recorded} (un-bisectable drift)"
+        return False, f"bundled CLI {cur} != the recorded/pinned version {recorded} (bump the SDK pin + re-record)"
     return True, cur
 
 
@@ -112,7 +113,7 @@ def full_check(floor: str, model: str, recorded: str | None = None) -> int:
     print(f"[1/3] auth ............ {'OK' if a_ok else 'FAIL'} — {a_msg}")
     ok &= a_ok
     v_ok, v_msg = version_ok(floor, recorded)
-    print(f"[2/3] claude version .. {'OK' if v_ok else 'FAIL'} — {v_msg}")
+    print(f"[2/3] agent runtime ... {'OK' if v_ok else 'FAIL'} — bundled CLI {v_msg}")
     ok &= v_ok
     # model-resolves needs auth; only meaningful if auth passed
     m_ok = a_ok and model_resolves(model)
@@ -130,6 +131,9 @@ def main(argv):
         ok, msg = auth_probe(); print(msg); return 0 if ok else 1
     if cmd == "resolve-model":
         print(resolve_cheapest_haiku()); return 0
+    if cmd == "sdk-version":
+        v = sdk_cli_version()
+        print(v or ""); return 0 if v else 1
     if cmd == "model-resolves":
         return 0 if (len(argv) > 1 and model_resolves(argv[1])) else 1
     if cmd == "version":

@@ -8,17 +8,12 @@ everything else — so a human running claude on the box, or a clone that copied
 gitconfig, can never be auto-classed as bot and clobbered.
 """
 import os
-import shutil
 from pathlib import Path
 
-
-def claude_bin() -> str:
-    """Resolve the `claude` executable. The recall/secretary agents shell out to it;
-    a supervised service can have a minimal PATH, so fall back to the standard install
-    location. CLAUDE_BIN overrides."""
-    return (os.environ.get("CLAUDE_BIN")
-            or shutil.which("claude")
-            or str(Path.home() / ".local" / "bin" / "claude"))
+# Recursion guard: set on the env of every server-side agent invocation so a nested
+# hook/agent that checks it bails instead of recursing (belt-and-suspenders; with the
+# SDK + setting_sources=None no user hooks load, but kept cheap + explicit).
+GUARD_ENV = "TEAMKB_AGENT"
 
 # The KB data repo (git repo of one-fact-per-file markdown = the truth).
 KB_REPO = Path(os.environ.get("BRAIN_KB_REPO", str(Path.home() / "brain-kb"))).expanduser()

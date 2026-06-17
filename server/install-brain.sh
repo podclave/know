@@ -23,7 +23,8 @@ PORT=8080
 SERVICE=teamkb
 
 # --- 0. preflight ------------------------------------------------------------
-for t in python3 openssl curl git sprite-env claude; do
+# No node / system `claude` needed: the Claude Agent SDK bundles a native CLI in the venv.
+for t in python3 openssl curl git sprite-env; do
   command -v "$t" >/dev/null 2>&1 || die "missing required tool: $t"
 done
 python3 -c 'import venv' 2>/dev/null || die "python3 venv module not available"
@@ -47,24 +48,23 @@ if [ -n "$URL_ACCESS" ] && [ "$URL_ACCESS" != "public" ]; then
 fi
 ok "Sprite is public: $SPRITE_URL"
 
-# --- 2. claude: update THEN assert the floor, then RECORD the version --------
-log "ensuring claude >= $CLAUDE_FLOOR (running \`claude update\`)..."
-claude update >/dev/null 2>&1 || log "claude update had nothing to do (or is managed) — continuing"
-CLAUDE_VER="$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-[ -n "$CLAUDE_VER" ] || die "could not determine claude version"
-python3 -c "import sys; f='$CLAUDE_FLOOR'.split('.'); v='$CLAUDE_VER'.split('.'); sys.exit(0 if tuple(map(int,v))>=tuple(map(int,f)) else 1)" \
-  || die "claude $CLAUDE_VER is below the floor $CLAUDE_FLOOR"
-ok "claude $CLAUDE_VER (floor $CLAUDE_FLOOR)"
-
-# --- 3. deploy the gateway code + venv ---------------------------------------
+# --- 2. deploy the gateway code + venv (the SDK brings the agent runtime) ----
 mkdir -p "$GW_DIR"
 cp "$HERE/gateway/"*.py "$HERE/gateway/requirements.txt" "$GW_DIR/"
 rm -rf "$GW_DIR/viewer"; cp -r "$HERE/gateway/viewer" "$GW_DIR/"   # OKF graph visualizer assets
 [ -d "$GW_DIR/.venv" ] || { log "creating gateway venv"; python3 -m venv "$GW_DIR/.venv"; }
-log "installing gateway deps"
+log "installing gateway deps (incl. claude-agent-sdk + its bundled native CLI)"
 "$GW_DIR/.venv/bin/pip" install -q --no-cache-dir --upgrade pip >/dev/null
 "$GW_DIR/.venv/bin/pip" install -q --no-cache-dir -r "$GW_DIR/requirements.txt"
 PYBIN="$GW_DIR/.venv/bin/python"
+
+# the agent runtime is the SDK's BUNDLED CLI — pinned by the SDK version, native +
+# Node-free. Read + floor-check + record it (no `claude update`, no PATH wiring).
+CLAUDE_VER="$("$PYBIN" "$GW_DIR/boot_check.py" sdk-version)"
+[ -n "$CLAUDE_VER" ] || die "could not determine the SDK's bundled CLI version"
+python3 -c "import sys; f='$CLAUDE_FLOOR'.split('.'); v='$CLAUDE_VER'.split('.'); sys.exit(0 if tuple(map(int,v))>=tuple(map(int,f)) else 1)" \
+  || die "bundled CLI $CLAUDE_VER is below the floor $CLAUDE_FLOOR (bump claude-agent-sdk)"
+ok "agent runtime: SDK bundled CLI $CLAUDE_VER (floor $CLAUDE_FLOOR)"
 
 # --- 4. resolve + pin the cheapest-tier model id (§5.2) ----------------------
 MODEL="${BRAIN_MODEL:-$("$PYBIN" "$GW_DIR/boot_check.py" resolve-model)}"
@@ -239,6 +239,6 @@ cat <<EOF
   (auth probe + mirror-pull + reconcile + curator liveness; a spun-down box
   can't cron itself, so this is required for off-box human-edit reconcile.)
   -------------------------------------------------------------------
-  KB repo: $KB_REPO     model: $MODEL     claude: $CLAUDE_VER
+  KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================
 EOF

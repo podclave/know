@@ -53,20 +53,27 @@ installed or cloned on your machine. Hooking in is adding **one URL**.
 
 ## Install (stand up a brain)
 
-On a **public** Sprite with an `ANTHROPIC_API_KEY` available (default: the `sk-` line
-of `~/ANTHROPIC_API_KEY`):
+On a **public** Sprite (or any host — see below) with an `ANTHROPIC_API_KEY` available
+(default: the `sk-` line of `~/ANTHROPIC_API_KEY`):
 
 ```bash
 bash server/install-brain.sh [brain-name]
 ```
 
-Idempotent — safe to re-run; standing up brain #N is the same command on a fresh
-Sprite. It runs `claude update` + asserts a version floor, resolves and pins the
-cheapest dated model id, mints the secret, inits the git repo (and a private `gh`
-mirror unless `BRAIN_NO_MIRROR=1`), creates the supervised service with the API key
-scoped to it, runs an **ordered boot self-check** (auth → version → model-resolves —
-refuses to report green on any failure), smoke-tests a real save+recall, and prints
-an onboarding card with your connect URL and the `/wake` heartbeat URL.
+Idempotent — safe to re-run; standing up brain #N is the same command on a fresh host.
+No Node or system `claude` needed: the agent runtime is the **Claude Agent SDK's bundled
+native CLI**, installed into the gateway venv by `pip` — self-contained, version-pinned
+by the SDK, and isolated from any interactive `claude` on the box. The installer pins the
+cheapest dated model id + records the bundled CLI version, mints the secret, inits the git
+repo (and a private `gh` mirror unless `BRAIN_NO_MIRROR=1`), creates the supervised service
+with the API key scoped to it, runs an **ordered boot self-check** (auth → agent runtime →
+model-resolves — refuses to report green on any failure), smoke-tests a real save+recall,
+and prints an onboarding card with your connect URL and the `/wake` heartbeat URL.
+
+Because the runtime is just a `pip install` (no Node, no global CLI, no `claude update`),
+the same script stands a brain up on a plain VM — e.g. a DigitalOcean droplet — not only a
+Sprite. (The `sprite-env` service wrapper is the one Sprite-specific piece; on another host
+run the gateway under any supervisor.)
 
 Useful env: `BRAIN_GITHUB_MIRROR=owner/repo`, `BRAIN_NO_MIRROR=1`,
 `BRAIN_ALERT_WEBHOOK=<slack-webhook>` (auth-failure alerts), `CLAUDE_FLOOR=2.1.92`.

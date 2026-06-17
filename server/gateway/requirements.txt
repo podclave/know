@@ -1,8 +1,12 @@
 # teamkb gateway — pinned, minimal. FastAPI MCP transport + a git-markdown store
-# driven by claude -p agents. No doc-ingest deps (pymupdf/docx/pptx) — out of scope.
+# driven by Claude Agent SDK agents. No doc-ingest deps (pymupdf/docx/pptx) — out of scope.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 httpx==0.28.1
 # frontmatter is now an OKF-conformant YAML block (consumed by other OKF tools),
 # so parse/emit it with a real YAML lib rather than a hand-rolled parser.
 pyyaml==6.0.2
+# the recall + secretary agents run via the Claude Agent SDK, which bundles a pinned,
+# native (Node-free) Claude Code CLI in the venv — self-contained, version-reproducible,
+# isolated from the box owner's interactive `claude`. No system `claude`/Node needed.
+claude-agent-sdk==0.2.103

@@ -23,13 +23,11 @@ contradiction queue, never over the human (spec §13.4).
 """
 import fcntl
 import json
-import os
 import re
-import subprocess
 from pathlib import Path
 
-from config import BOT_EMAILS, KB_REPO, SECRETARY_IDENTITY, claude_bin, model_id
-from recall import GUARD_ENV
+from agent import SECRETARY_BUDGET_USD, run_sync
+from config import BOT_EMAILS, KB_REPO, SECRETARY_IDENTITY, model_id
 from store import _git, push_mirror
 
 # Anti-hijack marker — the raw facts the secretary reads are DATA, not instructions
@@ -199,6 +197,32 @@ def enforce_whitelist(repo: Path, protected: set) -> list:
     return [p for _, p in _changed_paths(repo)]
 
 
+def _bundle_text(repo: Path, sub: str) -> str:
+    """Lower-cased concatenation of all concept docs in a subdir (for representation
+    checks). Excludes the reserved index.md."""
+    d = repo / sub
+    if not d.is_dir():
+        return ""
+    return "\n".join(f.read_text() for f in d.glob("*.md") if f.name != "index.md").lower()
+
+
+def _represented(repo: Path, raw_rel: str, target_text: str) -> bool:
+    """Is the gist of a raw fact present in `target_text`? Majority of the fact title's
+    significant (len>3) tokens must appear. Verifies a fact actually lives somewhere
+    before we move it out of raw/ — content-based, tolerant of rewording, and it blocks
+    a manifest that claims incorporation the agent didn't actually perform. Falls back to
+    'target non-empty' when the title has no distinctive tokens to check."""
+    from store import parse_md
+    if not target_text:
+        return False
+    meta, _ = parse_md((repo / raw_rel).read_text())
+    toks = {t for t in re.findall(r"[a-z0-9]+", str(meta.get("title", "")).lower()) if len(t) > 3}
+    if not toks:
+        return True  # nothing distinctive to verify; target is non-empty
+    hits = sum(1 for t in toks if t in target_text)
+    return hits >= max(1, len(toks) // 2)
+
+
 def _move_to_superseded(repo: Path, raw_ids, incorporated):
     """git mv each incorporated raw file to _superseded/ (never rm). `raw_ids` maps
     fact id -> repo-relative raw path."""
@@ -313,53 +337,36 @@ def validate_links(repo: Path):
 
 
 # --- the agent invocation (monkeypatched in tests) ---------------------------
-def _parse_envelope(returncode: int, stdout: str, stderr: str) -> dict:
-    """Parse a `claude -p --output-format json` envelope into a manifest dict. Pure +
-    testable (no subprocess). The schema-validated manifest is the envelope's
-    `structured_output`; we also surface per-pass cost/tokens as private `_`-keys so
-    they reach the observables without changing the agent() injection contract. Errors
-    (non-zero exit, unparseable envelope, is_error) return {'_error': ...}."""
-    if returncode != 0:
-        return {"_error": f"secretary agent failed (exit {returncode}): {stderr.strip()[:300]}"}
-    try:
-        env = json.loads(stdout)
-    except ValueError:
-        return {"_error": "secretary agent: unparseable JSON envelope"}
-    if not isinstance(env, dict):
-        return {"_error": "secretary agent: unexpected envelope shape"}
-    if env.get("is_error"):
-        detail = env.get("subtype") or (env.get("result") or "")[:200] or "unknown error"
-        return {"_error": f"secretary agent error: {detail}"}
-    manifest = env.get("structured_output")
-    if not isinstance(manifest, dict):
+def _result_to_manifest(res) -> dict:
+    """Map an agent.AgentResult into a manifest dict. The schema-validated manifest is
+    res.structured; per-pass cost/tokens ride as private `_`-keys so they reach the
+    observables without changing the agent() injection contract. Errors -> {'_error':…}."""
+    if res.is_error:
+        return {"_error": f"secretary agent: {res.error or 'error'}"}
+    manifest = res.structured if isinstance(res.structured, dict) else None
+    if manifest is None:
         # defensive fallback: salvage a JSON object from the result text
-        m = re.search(r"\{.*\}", env.get("result") or "", re.S)
+        m = re.search(r"\{.*\}", res.text or "", re.S)
         try:
             manifest = json.loads(m.group(0)) if m else {}
         except ValueError:
             manifest = {}
     if not isinstance(manifest, dict):
         manifest = {}
-    manifest["_cost_usd"] = env.get("total_cost_usd")
-    u = env.get("usage") or {}
-    manifest["_tokens"] = {"in": u.get("input_tokens"), "out": u.get("output_tokens")}
+    manifest["_cost_usd"] = res.cost_usd
+    manifest["_tokens"] = res.tokens
     return manifest
 
 
 def _run_agent(repo: Path, model: str, prompt: str, timeout: int):
-    """Run the secretary `claude` with curated-only write tools and forced structured
-    output (a schema-validated manifest). Returns the parsed manifest dict (with private
-    _cost_usd/_tokens) or {'_error': ...}."""
-    env = dict(os.environ, **{GUARD_ENV: "1"})
-    try:
-        p = subprocess.run(
-            [claude_bin(), "-p", prompt, "--model", model,
-             "--output-format", "json", "--json-schema", json.dumps(MANIFEST_SCHEMA),
-             "--allowed-tools", "Read", "Grep", "Glob", "Write", "Edit"],
-            cwd=str(repo), capture_output=True, text=True, timeout=timeout, env=env)
-    except subprocess.TimeoutExpired:
-        return {"_error": "secretary agent timed out"}
-    return _parse_envelope(p.returncode, p.stdout, p.stderr)
+    """Run the secretary agent (via the Claude Agent SDK) with curated-only write tools
+    and a forced structured-output manifest. Returns the parsed manifest dict (with
+    private _cost_usd/_tokens) or {'_error': ...}."""
+    res = run_sync(prompt=prompt, cwd=repo, model=model,
+                   allowed_tools=["Read", "Grep", "Glob", "Write", "Edit"], write=True,
+                   schema=MANIFEST_SCHEMA, max_turns=60, budget=SECRETARY_BUDGET_USD,
+                   timeout=timeout)
+    return _result_to_manifest(res)
 
 
 # --- the pass ----------------------------------------------------------------
@@ -391,7 +398,6 @@ def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
     if raw_before == 0 and base == R:
         return {"status": "noop", "reason": "nothing_new"}
 
-    raw_map = _raw_id_map(repo)
     prompt = CURATION_PROMPT.format(
         marker=SECRETARY_MARKER, contradictions=CONTRADICTIONS,
         protected=(", ".join(sorted(protected)) or "(none this pass)"))
@@ -402,20 +408,26 @@ def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
 
     # 1. enforce the write-whitelist (reverts forbidden + protected-file changes)
     allowed_changes = enforce_whitelist(repo, protected)
-    # incorporated (now in curated/) + queued (now in CONTRADICTIONS.md) both leave
-    # the raw backlog -> moved to _superseded/. Without moving queued facts, every
-    # future pass would re-file the same unresolved contradiction (a re-queue loop).
-    # GUARD: only honor a claimed incorporation/queue if the agent ACTUALLY produced
-    # the corresponding write — else a lying/empty manifest would move raw facts out
-    # of the recall path without ever curating them (they'd vanish, though recoverable
-    # from _superseded/). A fact only leaves raw/ once it provably lives somewhere else.
-    has_curated = any(p.startswith("curated/") for p in allowed_changes)
-    has_contradictions = CONTRADICTIONS in allowed_changes
-    incorporated = ([i for i in (manifest.get("incorporated_raw_ids") or []) if i in raw_map]
-                    if has_curated else [])
-    queued = ([i for i in (manifest.get("queued_raw_ids") or [])
-               if i in raw_map and i not in incorporated]
-              if has_contradictions else [])
+    # Resolve raw ids against the CURRENT raw/ (not a pass-start snapshot): a `save`
+    # can land via a `capture` commit WHILE the agent runs, and if the agent curated
+    # that fresh fact we must still move it out of raw/ — else it stays duplicated in
+    # raw/ AND curated/ and gets re-curated forever. (capture is a bot author, so the
+    # mid-pass commit doesn't trip the human-edit concurrency guard below.)
+    raw_map = _raw_id_map(repo)
+    # incorporated (now in curated/) + queued (now in CONTRADICTIONS.md) both leave the
+    # raw backlog -> moved to _superseded/. GUARD: a fact only leaves raw/ once its gist
+    # is VERIFIABLY PRESENT in the destination — incorporated must be represented in the
+    # curated bundle, queued must be represented in CONTRADICTIONS.md. This is content-
+    # based (not "did this pass write a file"), so it (a) blocks a lying/empty manifest
+    # from moving facts that aren't actually curated, AND (b) self-heals facts that are
+    # ALREADY represented (a re-run or a mid-pass capture) instead of leaving them
+    # duplicated in raw/ + curated/ forever.
+    curated_text = _bundle_text(repo, "curated")
+    contra_text = (repo / CONTRADICTIONS).read_text().lower() if (repo / CONTRADICTIONS).exists() else ""
+    incorporated = [i for i in (manifest.get("incorporated_raw_ids") or [])
+                    if i in raw_map and _represented(repo, raw_map[i], curated_text)]
+    queued = [i for i in (manifest.get("queued_raw_ids") or [])
+              if i in raw_map and i not in incorporated and _represented(repo, raw_map[i], contra_text)]
     to_move = incorporated + queued
 
     # 2. blast-radius cap (curated changes + raw files about to move)

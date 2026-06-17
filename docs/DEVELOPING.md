@@ -22,15 +22,22 @@ installer). The KB data repo (`~/teamkb-kb` by default) is the truth.
 - **`store.py`** — the git-markdown store. `save`/`list`/`supersede`, scrub-on-write,
   commits via the **env-pinned identity wrapper** (`-c user.email=…` per invocation,
   never a clonable gitconfig). `supersede` moves to `_superseded/` (never `rm`).
-- **`recall.py`** — `recall(query)` spawns a cheap `claude -p` with read-only file
-  tools (`Read`/`Grep`/`Glob`) in the repo; the `curated/` OKF bundle first, raw/ on a miss. The
-  §5.5 observables (empty-brain honesty, curated-K-vs-raw-M count, loud auth-invalid
-  message) are computed **deterministically in Python**, not left to the model.
+- **`agent.py`** — server-side agent invocation via the **Claude Agent SDK**
+  (`claude-agent-sdk`). `collect()` (async, for recall) / `run_sync()` (for the secretary
+  in a worker thread) run the SDK's bundled native CLI with `allowed_tools`, `cwd`,
+  `setting_sources=None` (isolated from the box's `~/.claude`), and structured output;
+  both return an `AgentResult` carrying text/structured/cost/tokens. Replaces shelling out
+  to `claude -p`.
+- **`recall.py`** — `recall(query)` runs a cheap read-only agent (`Read`/`Grep`/`Glob`)
+  over the repo; the `curated/` OKF bundle first, raw/ on a miss. The §5.5 observables
+  (empty-brain honesty, curated-K-vs-raw-M count, loud auth-invalid message) are computed
+  **deterministically in Python**, not left to the model.
 - **`secretary.py`** — the curator (see safety model below).
-- **`config.py`** — the two reserved bot identities, paths, model-pin resolution,
-  `claude_bin()`.
-- **`boot_check.py`** — the auth probe, version-floor check, model-resolves check, and
-  cheapest-haiku resolver. Used by the installer's ordered self-check and by `/wake`.
+- **`config.py`** — the two reserved bot identities, paths, model-pin resolution, the
+  agent recursion-guard env.
+- **`boot_check.py`** — the auth probe, agent-runtime version check (the SDK's *bundled*
+  CLI version), model-resolves check, and cheapest-haiku resolver. Used by the installer's
+  ordered self-check and by `/wake`.
 - **`app.py`** — wires it together; the event-driven secretary trigger and `/wake`.
 - **`server/kb-template/CLAUDE.md`** — the methodology seeded into each KB repo. **This
   is the real product surface** — curation quality rides on it, and it's pure
@@ -43,21 +50,22 @@ it.** That split is the whole design — a weak model's judgment must never be a
 clobber a human edit, delete a fact, or run away across the repo.
 
 - The **agent** (judgment) may write ONLY to `curated/` and `CONTRADICTIONS.md`; it has
-  no Bash, so it can't `rm` or `git`. It runs via `claude -p --output-format json
-  --json-schema <MANIFEST_SCHEMA>`, so it reports a **schema-validated manifest** (which
-  raw ids it incorporated/queued/deferred) in the envelope's `structured_output` — parsed
-  cleanly by `_parse_envelope()` rather than regex-salvaged from free text. The same
-  envelope carries `total_cost_usd` + token `usage`, which land in the per-pass
-  observables note (`[cost] pass_usd=… tokens_in/out=…`) and the `run_pass` result. We
-  stayed on the CLI (not the `claude-agent-sdk`) deliberately: `--output-format json` is
-  the stable scripting surface and doesn't disturb the `claude update` / version-pin
-  lifecycle, while the SDK bundles its own CLI. (Recall stays `--output-format text` — it
-  returns prose, not a manifest.)
+  no Bash, so it can't `rm` or `git`. It runs via the Agent SDK with a forced
+  `output_format` JSON schema, so it reports a **schema-validated manifest** (which raw
+  ids it incorporated/queued/deferred) in `ResultMessage.structured_output` — mapped by
+  `_result_to_manifest()`, no regex-salvage. The same result carries `total_cost_usd` +
+  token `usage`, which land in the per-pass observables note (`[cost] pass_usd=…
+  tokens_in/out=…`) and the `run_pass` result.
 - **Python** (safety), after the agent runs, regardless of what the agent did:
   - **never rm** — `enforce_whitelist()` reverts any agent change outside that
     write-whitelist (incl. anything it touched under `raw/`/`_superseded/`); the only
-    raw mutation is Python's own `git mv` of incorporated/queued facts to
-    `_superseded/`.
+    raw mutation is Python's own `git mv` of incorporated/queued facts to `_superseded/`.
+  - **a fact leaves `raw/` only when it's verifiably represented** — `_represented()`
+    checks the raw fact's title tokens against the curated bundle (incorporated) or
+    `CONTRADICTIONS.md` (queued) using a FRESH `raw/` snapshot taken after the agent runs.
+    Content-based, so it blocks a lying/empty manifest from moving uncurated facts AND
+    self-heals facts already represented (a re-run, or a `save` that lands mid-pass as a
+    `capture` commit) instead of leaving them duplicated in `raw/` + `curated/`.
   - **human always wins** — files touched by unreconciled HUMAN commits (author email
     ≠ the two reserved bot identities) are in `protected`; the agent is told to skip
     them and Python reverts them if it doesn't. A contradicting machine fact goes to
@@ -109,21 +117,24 @@ with 9 resolving cross-links, 0 broken; idempotent on re-run.
   wraps any handler exception as an `isError` tool result the model sees ("teamkb call
   failed: …"). Recall raises a distinct, loud message on auth failure vs a generic
   agent failure.
-- **`claude -p` writes its own transcript** → the passive-capture plugin skips
-  transcripts containing the `DISTILLER_MARKER`, and the recall/secretary agents set a
-  `TEAMKB_AGENT` recursion guard so nested hooks bail.
+- **Agents run via the Claude Agent SDK, not `claude -p`** → the SDK bundles a pinned,
+  native (Node-free) CLI in the venv, so the agent runtime is self-contained,
+  version-reproducible across installs (the SDK version IS the pin — no `claude update`,
+  no record-the-resolved-version dance), and isolated from the box owner's interactive
+  `claude` (`setting_sources=None` + the bundled binary, so no user hooks/settings load).
+  This is what makes standing a brain up on any host a `pip install`. The recursion-guard
+  env (`TEAMKB_AGENT`) is still set, belt-and-suspenders.
 - **Feedback loop** → the capture plugin strips injected `<team-brain-context>` blocks
   and `isMeta` entries before distilling, so the brain never re-ingests what it recalled.
+  (The plugin runs on the teammate's own machine and still uses their `claude -p`.)
 - **Scope the API key to the service, not the shell** (spec §9.8) — a global
   `ANTHROPIC_API_KEY` overrides the box owner's interactive subscription and the
   approval sticks in `~/.claude/.credentials.json`. The installer sets it only on the
-  `sprite-env` service env.
-- **Pin the model + record the claude version** — `claude update` pulls unpinned latest,
-  so without recording, brain #1 and #N run un-bisectable runtimes. Both live on one
-  line in the KB repo's CLAUDE.md; the boot self-check verifies the model still resolves
-  and fails loud on deprecation.
-- **`claude` is a node app under a minimal service PATH** → `config.claude_bin()`
-  resolves it and the installer passes `PATH` into the service env.
+  `sprite-env` service env; the SDK reads it from there.
+- **Pin the model + record the runtime** — the model id lives on one line in the KB
+  repo's CLAUDE.md (boot self-check verifies it still resolves, fails loud on
+  deprecation); the agent runtime is pinned by the `claude-agent-sdk` version and its
+  bundled CLI version is recorded alongside, so brain #1 and #N run identical runtimes.
 
 ## Known limitations (deliberate)
 
@@ -146,9 +157,10 @@ with 9 resolving cross-links, 0 broken; idempotent on re-run.
 
 ```bash
 cd server/gateway && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
-.venv/bin/python -m pytest          # 37 tests: transport, store, secretary invariants
+.venv/bin/python -m pytest          # transport, store, secretary invariants, OKF, viewer
 ```
 
-Transport + store + secretary-safety run with no claude and no network. Recall and
-secretary *quality* are checked by pointing a real key at a fixture repo (see the
+Transport + store + secretary-safety + viewer run with no agent calls and no network
+(the agent is injected as a fake). Recall and secretary *quality* are checked by pointing
+a real key at a fixture repo (see the
 commit history for the live-verification commands).

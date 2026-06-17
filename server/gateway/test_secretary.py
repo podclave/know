@@ -186,6 +186,45 @@ def test_claimed_incorporation_without_curated_write_does_not_move_raw(repo):
     assert res["status"] == "noop"
 
 
+# --- mid-pass save: a fact captured WHILE the agent runs is still moved ------
+def test_fact_captured_during_pass_is_incorporated_and_moved(repo):
+    # no raw at pass start; the "agent" simulates a save landing mid-pass (a capture
+    # commit) and curates it. Python must resolve the move against the CURRENT raw/,
+    # so the fresh fact leaves raw/ instead of duplicating into raw/ + curated/.
+    def fake_agent(r, model, prompt, timeout):
+        saved = repo.save("Midpass discovery service", "arrived during the pass", attribution="alice")
+        (r / "curated" / "midpass.md").write_text(
+            "---\ntype: Fact\ntitle: Midpass discovery service\n---\narrived during the pass\n")
+        return {"incorporated_raw_ids": [saved["id"]], "summary": "curated a mid-pass fact"}
+
+    res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    assert res["status"] == "committed"
+    assert not list((repo.repo / "raw").glob("*.md")), "mid-pass fact left duplicated in raw/"
+    assert len(list((repo.repo / "_superseded").glob("*.md"))) == 1
+    assert (repo.repo / "curated" / "midpass.md").exists()
+
+
+# --- self-heal: an already-curated raw fact is moved out even with no new write ----
+def test_already_curated_raw_fact_is_moved_out(repo):
+    saved = repo.save("Kong gateway service", "Kong on port 8000", attribution="a")
+    # a prior pass already produced the curated concept (commit it as the secretary)
+    (repo.repo / "curated" / "kong-gateway.md").write_text(
+        "---\ntype: Architecture\ntitle: Kong gateway service\n---\nKong runs on port 8000.\n")
+    subprocess.run(["git", "-C", str(repo.repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo.repo), "-c", "user.name=sec",
+                    "-c", "user.email=" + config.SECRETARY_IDENTITY[1],
+                    "commit", "-q", "-m", "secretary: prior"], check=True)
+
+    def fake_agent(r, model, prompt, timeout):
+        # fact is ALREADY curated -> agent makes NO curated change, just reports it
+        return {"incorporated_raw_ids": [saved["id"]], "summary": "already curated"}
+
+    res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    assert res["status"] == "committed"
+    assert not list((repo.repo / "raw").glob("*.md")), "already-curated fact stayed duplicated in raw/"
+    assert len(list((repo.repo / "_superseded").glob("*.md"))) == 1
+
+
 # --- agent failure is clean -------------------------------------------------
 def test_agent_error_is_clean_noop(repo):
     repo.save("f", "b", attribution="a")
@@ -260,44 +299,34 @@ def test_cross_links_validated(repo):
     assert any("/abs.md" in b for b in res["broken_links"])
 
 
-# --- structured-output manifest parsing (no claude; pure envelope parsing) ---
-import json as _json  # noqa: E402
+# --- AgentResult -> manifest mapping (no SDK call; pure) ---------------------
+from agent import AgentResult  # noqa: E402
 
 
-def _envelope(**kw):
-    base = {"type": "result", "subtype": "success", "is_error": False,
-            "result": "ok", "total_cost_usd": 0.012,
-            "usage": {"input_tokens": 100, "output_tokens": 20}}
-    base.update(kw)
-    return _json.dumps(base)
-
-
-def test_parse_envelope_uses_structured_output_and_cost():
-    env = _envelope(structured_output={
-        "incorporated_raw_ids": ["a", "b"], "contradictions_queued": 1, "summary": "did it"})
-    m = secretary._parse_envelope(0, env, "")
+def test_result_to_manifest_uses_structured_output_and_cost():
+    res = AgentResult(structured={"incorporated_raw_ids": ["a", "b"],
+                                  "contradictions_queued": 1, "summary": "did it"},
+                      cost_usd=0.012, tokens={"in": 100, "out": 20})
+    m = secretary._result_to_manifest(res)
     assert m["incorporated_raw_ids"] == ["a", "b"] and m["summary"] == "did it"
     assert m["_cost_usd"] == 0.012 and m["_tokens"] == {"in": 100, "out": 20}
 
 
-def test_parse_envelope_nonzero_exit_is_error():
-    m = secretary._parse_envelope(1, "", "boom on stderr")
-    assert "_error" in m and "boom on stderr" in m["_error"]
-
-
-def test_parse_envelope_is_error_flag():
-    m = secretary._parse_envelope(0, _envelope(is_error=True, subtype="error_max_turns"), "")
+def test_result_to_manifest_is_error():
+    m = secretary._result_to_manifest(AgentResult(is_error=True, error="error_max_turns"))
     assert "_error" in m and "error_max_turns" in m["_error"]
 
 
-def test_parse_envelope_unparseable_is_error():
-    assert "_error" in secretary._parse_envelope(0, "not json", "")
-
-
-def test_parse_envelope_salvages_from_result_when_no_structured_output():
-    env = _envelope(result='here {"incorporated_raw_ids": ["x"], "summary": "s"}')
-    m = secretary._parse_envelope(0, env, "")
+def test_result_to_manifest_salvages_from_text_when_no_structured():
+    res = AgentResult(text='here {"incorporated_raw_ids": ["x"], "summary": "s"}',
+                      cost_usd=0.001)
+    m = secretary._result_to_manifest(res)
     assert m["incorporated_raw_ids"] == ["x"] and m["summary"] == "s"
+
+
+def test_result_to_manifest_no_structured_no_salvage_is_empty_with_cost():
+    m = secretary._result_to_manifest(AgentResult(text="just prose, no json", cost_usd=0.002))
+    assert m.get("incorporated_raw_ids") is None and m["_cost_usd"] == 0.002
 
 
 def test_run_pass_threads_cost_into_result_and_note(repo):
