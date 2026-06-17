@@ -267,9 +267,17 @@ def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
     # incorporated (now in curated/) + queued (now in CONTRADICTIONS.md) both leave
     # the raw backlog -> moved to _superseded/. Without moving queued facts, every
     # future pass would re-file the same unresolved contradiction (a re-queue loop).
-    incorporated = [i for i in (manifest.get("incorporated_raw_ids") or []) if i in raw_map]
-    queued = [i for i in (manifest.get("queued_raw_ids") or [])
-              if i in raw_map and i not in incorporated]
+    # GUARD: only honor a claimed incorporation/queue if the agent ACTUALLY produced
+    # the corresponding write — else a lying/empty manifest would move raw facts out
+    # of the recall path without ever curating them (they'd vanish, though recoverable
+    # from _superseded/). A fact only leaves raw/ once it provably lives somewhere else.
+    has_curated = any(p.startswith("curated/") for p in allowed_changes)
+    has_contradictions = CONTRADICTIONS in allowed_changes
+    incorporated = ([i for i in (manifest.get("incorporated_raw_ids") or []) if i in raw_map]
+                    if has_curated else [])
+    queued = ([i for i in (manifest.get("queued_raw_ids") or [])
+               if i in raw_map and i not in incorporated]
+              if has_contradictions else [])
     to_move = incorporated + queued
 
     # 2. blast-radius cap (curated changes + raw files about to move)
@@ -294,7 +302,6 @@ def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
             return {"status": "deferred", "reason": "concurrent_human_edit"}
 
     # 5. commit as the secretary (one revertable, tagged commit) + observables note
-    raw_after = _count(repo, "raw") - 0  # raw_map moves reduce this after commit
     note = _observables(repo, base, R, len(incorporated), len(moved),
                         manifest, raw_before)
     summary = (manifest.get("summary") or "curation pass").strip()

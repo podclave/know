@@ -160,6 +160,22 @@ def test_concurrent_human_commit_defers(repo):
     assert log_authors(repo.repo)[0] == HUMAN[1]
 
 
+# --- lying manifest: claims incorporation but wrote nothing -> no raw move ---
+def test_claimed_incorporation_without_curated_write_does_not_move_raw(repo):
+    repo.save("f", "important body", attribution="alice")
+    ids = _raw_ids(repo)
+
+    def fake_agent(r, model, prompt, timeout):
+        # reports incorporation but writes NOTHING to curated/ (a lie / empty pass)
+        return {"incorporated_raw_ids": ids, "summary": "claims but does nothing"}
+
+    res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    # the raw fact must NOT have vanished into _superseded (nothing was actually curated)
+    assert list((repo.repo / "raw").glob("*.md")), "raw fact was moved without being curated"
+    assert not list((repo.repo / "_superseded").glob("*.md"))
+    assert res["status"] == "noop"
+
+
 # --- agent failure is clean -------------------------------------------------
 def test_agent_error_is_clean_noop(repo):
     repo.save("f", "b", attribution="a")
