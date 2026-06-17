@@ -82,7 +82,7 @@ Useful env: `BRAIN_GITHUB_MIRROR=owner/repo`, `BRAIN_NO_MIRROR=1`,
 
 ## Connect (Claude Code)
 
-**1. Get your connector URL — from your brain admin.** Whoever stood up the brain has it
+**1. Get your connector URL — from your `know` admin.** Whoever stood up the brain has it
 (it's on the onboarding card the installer prints). It looks like
 `https://<brain-host>/mcp/<secret>/<your-name>/`, where `<brain-host>` is wherever your
 team runs the brain. This URL **is** the credential — treat it like a password.
