@@ -1,6 +1,6 @@
-# Developing teamkb
+# Developing know
 
-The context to work **on** teamkb. To stand one up or use it, see
+The context to work **on** know. To stand one up or use it, see
 [../README.md](../README.md).
 
 Status: working, verified end-to-end on a real public Sprite (install → connect over
@@ -9,8 +9,8 @@ re-install).
 
 ## The pieces
 
-All server code is `server/gateway/` (FastAPI, deployed to `~/teamkb-gateway` by the
-installer). The KB data repo (`~/teamkb-kb` by default) is the truth.
+All server code is `server/gateway/` (FastAPI, deployed to `~/know-gateway` by the
+installer). The KB data repo (`~/know-kb` by default) is the truth.
 
 - **`mcp_endpoint.py`** — the MCP-over-HTTP transport, mounted at the secret path
   `/mcp/<secret>/<name>/`. Lifted from podbrain's `build_router` (JSON-RPC /
@@ -92,14 +92,14 @@ idempotent on a second pass).
 
 [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 is Google's vendor-neutral spec for the "LLM-wiki" pattern — markdown concept docs with
-YAML frontmatter, an `index.md`, and cross-links. teamkb was ~90% this shape already;
+YAML frontmatter, an `index.md`, and cross-links. know was ~90% this shape already;
 conforming costs nothing and means the curated bundle is readable by any OKF tool (e.g.
 the OKF static graph visualizer) with zero lock-in and no GCP dependency.
 
 Mapping: **`curated/` is the bundle** (flat); `raw/`, `_superseded/`, `CLAUDE.md`,
-`contradictions/` are teamkb-internal, outside it. Each concept doc carries
+`contradictions/` are know-internal, outside it. Each concept doc carries
 `type` (OKF's one required field) / `title` / `description` / `tags` / `timestamp` plus
-teamkb extension keys (`author`/`surface`/`source`/`id`, which OKF preserves). Frontmatter
+know extension keys (`author`/`surface`/`source`/`id`, which OKF preserves). Frontmatter
 is real YAML (`pyyaml`) since other tools parse it.
 
 Same split as the safety model — **the agent authors judgment, Python guarantees the
@@ -120,7 +120,7 @@ with 9 resolving cross-links, 0 broken; idempotent on re-run.
 ## Lessons carried over from podbrain (pre-empted, not rediscovered)
 
 - **A down brain must be a VISIBLE tool error**, never silent success. The MCP layer
-  wraps any handler exception as an `isError` tool result the model sees ("teamkb call
+  wraps any handler exception as an `isError` tool result the model sees ("know call
   failed: …"). Recall raises a distinct, loud message on auth failure vs a generic
   agent failure.
 - **Agents run via the Claude Agent SDK, not `claude -p`** → the SDK bundles a pinned,
@@ -129,7 +129,7 @@ with 9 resolving cross-links, 0 broken; idempotent on re-run.
   no record-the-resolved-version dance), and isolated from the box owner's interactive
   `claude` (`setting_sources=None` + the bundled binary, so no user hooks/settings load).
   This is what makes standing a brain up on any host a `pip install`. The recursion-guard
-  env (`TEAMKB_AGENT`) is still set, belt-and-suspenders.
+  env (`KNOW_AGENT`) is still set, belt-and-suspenders.
 - **Feedback loop** → the capture plugin strips injected `<team-brain-context>` blocks
   and `isMeta` entries before distilling, so the brain never re-ingests what it recalled.
   (The plugin runs on the teammate's own machine and still uses their `claude -p`.)

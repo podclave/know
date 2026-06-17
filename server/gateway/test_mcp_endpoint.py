@@ -88,7 +88,7 @@ def test_initialize_echoes_known_protocol(harness):
     client, _ = harness
     body = rpc(client, "initialize", {"protocolVersion": "2025-03-26"}).json()
     assert body["result"]["protocolVersion"] == "2025-03-26"
-    assert body["result"]["serverInfo"]["name"] == "teamkb"
+    assert body["result"]["serverInfo"]["name"] == "know"
 
 
 def test_initialize_unknown_version_returns_latest(harness):
@@ -249,5 +249,5 @@ def test_handler_exception_is_visible_tool_error(harness):
     h.recall = boom
     body = call(client, "recall", {"query": "x"}).json()["result"]
     assert body["isError"] is True
-    assert "teamkb call failed" in body["content"][0]["text"]
+    assert "know call failed" in body["content"][0]["text"]
     assert "brain auth invalid" in body["content"][0]["text"]

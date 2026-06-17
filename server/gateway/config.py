@@ -13,7 +13,7 @@ from pathlib import Path
 # Recursion guard: set on the env of every server-side agent invocation so a nested
 # hook/agent that checks it bails instead of recursing (belt-and-suspenders; with the
 # SDK + setting_sources=None no user hooks load, but kept cheap + explicit).
-GUARD_ENV = "TEAMKB_AGENT"
+GUARD_ENV = "KNOW_AGENT"
 
 # The KB data repo (git repo of one-fact-per-file markdown = the truth).
 KB_REPO = Path(os.environ.get("BRAIN_KB_REPO", str(Path.home() / "brain-kb"))).expanduser()
@@ -22,11 +22,11 @@ KB_REPO = Path(os.environ.get("BRAIN_KB_REPO", str(Path.home() / "brain-kb"))).e
 SECRET = os.environ.get("BRAIN_SECRET", "").strip()
 
 # Human-readable brain/team name (onboarding cards, commit context).
-BRAIN_NAME = os.environ.get("BRAIN_NAME", "teamkb").strip() or "teamkb"
+BRAIN_NAME = os.environ.get("BRAIN_NAME", "know").strip() or "know"
 
 # Reserved bot identities — (name, email). The email is what the classifier keys on.
-CAPTURE_IDENTITY = ("teamkb-capture", "capture@teamkb.local")
-SECRETARY_IDENTITY = ("teamkb-secretary", "secretary@teamkb.local")
+CAPTURE_IDENTITY = ("know-capture", "capture@know.local")
+SECRETARY_IDENTITY = ("know-secretary", "secretary@know.local")
 BOT_EMAILS = {CAPTURE_IDENTITY[1], SECRETARY_IDENTITY[1]}
 
 # Mirror remote name (private GitHub mirror; push is best-effort).

@@ -2,8 +2,8 @@
 
 Adapted from the OKF reference visualizer
 (github.com/GoogleCloudPlatform/knowledge-catalog, okf/src/enrichment_agent/viewer,
-Apache-2.0 — see NOTICE). Changes: parse frontmatter with teamkb's own `store.parse_md`
-(no enrichment_agent dependency), use teamkb's concept-type palette, and return the HTML
+Apache-2.0 — see NOTICE). Changes: parse frontmatter with know's own `store.parse_md`
+(no enrichment_agent dependency), use know's concept-type palette, and return the HTML
 as a string for on-demand serving rather than writing a file. The bundled viz.html /
 viz.css / viz.js are the upstream assets, vendored verbatim.
 """
@@ -21,7 +21,7 @@ _DIR = Path(__file__).parent
 _INDEX_NAME = "index.md"
 _LINK_RE = re.compile(r"\]\(([^)\s]+\.md)(?:#[A-Za-z0-9_\-]*)?\)")
 
-# teamkb concept types -> node colors (unknown types fall back to slate).
+# know concept types -> node colors (unknown types fall back to slate).
 _TYPE_PALETTE = {
     "Fact": "#3b82f6",
     "Decision": "#8b5cf6",
@@ -108,7 +108,7 @@ def _build_graph(concepts: list[Concept]) -> dict[str, Any]:
             "types": sorted({c.type for c in concepts}), "palette": _TYPE_PALETTE}
 
 
-def generate_html(bundle_root: Path, bundle_name: str = "teamkb") -> str:
+def generate_html(bundle_root: Path, bundle_name: str = "know") -> str:
     """Walk the OKF bundle at `bundle_root` and return a single self-contained HTML
     visualization (no backend; cytoscape + marked load from CDN in the browser)."""
     bundle_root = Path(bundle_root)

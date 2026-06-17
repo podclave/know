@@ -1,4 +1,4 @@
-"""Viewer tests — the OKF graph generator (teamkb-authored logic) and the
+"""Viewer tests — the OKF graph generator (know-authored logic) and the
 secret-gated /viewer route. No network: cytoscape/marked are CDN <script> tags in
 the emitted HTML, never fetched here."""
 import json

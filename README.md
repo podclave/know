@@ -1,4 +1,4 @@
-# teamkb
+# know
 
 A small, self-hosted **team brain**: one server per team/concern that gives every
 teammate's Claude shared, durable memory. Ask a question and **recall** returns what
@@ -7,8 +7,10 @@ server-side **secretary** keeps the knowledge organized. The whole thing is a gi
 of one-fact-per-file markdown — the git repo is the truth — wrapped in an
 MCP-over-HTTP server you connect to as a single URL.
 
-Connect from **Claude Code, claude.ai, Claude Desktop, or Cowork** — nothing is
-installed or cloned on your machine. Hooking in is adding **one URL**.
+**Claude Code is the home surface:** install the `know` plugin (one step — the MCP
+connector + `/know:` commands + optional passive capture) and point it at your personal
+URL. claude.ai / Desktop / Cowork can connect to the same URL, but there a connector is
+account-global and needs manual settings — prefer Claude Code (see Connect below).
 
 > Standalone and open-source-able (its own repo). Inspired by — and lifting ~⅔ of its
 > server scaffolding from — [podbrain](https://github.com/podclave/podbrain), but with
@@ -78,21 +80,45 @@ run the gateway under any supervisor.)
 Useful env: `BRAIN_GITHUB_MIRROR=owner/repo`, `BRAIN_NO_MIRROR=1`,
 `BRAIN_ALERT_WEBHOOK=<slack-webhook>` (auth-failure alerts), `CLAUDE_FLOOR=2.1.92`.
 
-## Connect (per surface — honestly not one identical step)
+## Connect (Claude Code)
 
-The connect URL is `https://<brain>.sprites.app/mcp/<secret>/<your-name>/` (append your
-own name). Hooking in is adding that URL; the per-surface friction is connector
-*governance*, not auth:
+Each teammate has a personal URL `https://<brain>.sprites.app/mcp/<secret>/<your-name>/`
+— the `<name>` is your attribution, and the URL **is** the credential (treat it like a
+password).
 
-- **Claude Code:** `claude mcp add --transport http teamkb "<your-url>"` — per-member, once.
-- **claude.ai / Desktop / Cowork (Team/Enterprise):** an **org owner** adds the URL once
-  as a custom connector (a non-owner can't), then each member adds the same URL and
-  toggles it **on per-conversation** via `+` → Connectors. A fresh chat with it off
-  returns nothing — and empty recall looks identical to "the brain knows nothing", so
-  remember to toggle it on.
+**Recommended — the `know` plugin** (one install: the connector + `/know:recall`,
+`/know:contradictions`, `/know:resolve` commands + optional capture):
+
+```
+claude plugin marketplace add <owner>/know     # the published know repo (or a local path)
+claude plugin install know@know --config brain_mcp_url="https://<brain>.sprites.app/mcp/<secret>/<your-name>/"
+claude plugin enable know@know
+```
+
+Your URL is stored in Claude Code's **secure storage** (never committed). For a team repo,
+commit `.claude/settings.json` so the brain auto-enables **per-project** on clone + trust:
+
+```json
+{ "extraKnownMarketplaces": { "know": { "source": { "source": "github", "repo": "<owner>/know" } } },
+  "enabledPlugins": { "know@know": true },
+  "permissions": { "allow": ["mcp__plugin_know_know__recall","mcp__plugin_know_know__list","mcp__plugin_know_know__contradictions"] } }
+```
+
+Reads auto-approve; `save`/`supersede`/`resolve` still prompt. Each teammate sets their own
+URL once via the plugin config — only the non-secret settings are committed.
+
+**Bare connector** (no `/know:` commands or capture): `claude mcp add --transport http --scope local know "<your-url>"`.
 
 Then just use Claude normally: it recalls when you ask about the team/project and saves
 durable facts as they come up. You never see a repo, sync, or file.
+
+### claude.ai / Cowork — not recommended
+
+The same URL works as a custom connector, but claude.ai connectors are **account-global**
+(enabled in every conversation/project, not per-project) and need a manual Settings tweak
+(Capabilities → Tool access mode) before tools load — and the model is likelier to reach
+for a same-named local folder than the connector. There's no per-project scoping and no
+plugin. Use Claude Code; reach for the web surfaces only if you must.
 
 ## Browse the brain (OKF visualizer)
 
@@ -111,12 +137,12 @@ any uptime monitor) that POSTs to `<brain>/wake` hourly: it runs the auth probe 
 alerts on failure), pulls the mirror, reconciles human edits, and reports curator
 liveness. A spun-down box can't cron itself, so this pinger is required.
 
-## Optional: passive capture for Claude Code
+## Passive capture (part of the plugin)
 
-`client-plugin/` is a `defaultEnabled:false` plugin that distills durable facts from
-each Claude Code session and saves them — a CLI-only nicety the design does **not** rely
-on (recall/save already work without it; web surfaces have no hook). Enable it and set
-`brain_mcp_url` to your connect URL.
+The `know` plugin also ships an optional Stop/SessionEnd hook that distills durable facts
+from each Claude Code session and saves them — a CLI-only nicety the design does **not**
+rely on (model-initiated `save` already works without it; web surfaces have no hook). It
+reuses the same `brain_mcp_url` you set at install, so there's nothing extra to configure.
 
 ## Editing the brain directly (power users)
 

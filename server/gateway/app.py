@@ -1,4 +1,4 @@
-"""teamkb gateway — the brain's single public front door (FastAPI).
+"""know gateway — the brain's single public front door (FastAPI).
 
 Mounts the MCP-over-HTTP transport at the secret path /mcp/<secret>/<name>/ and
 fulfills its four tools (recall/save/list/supersede) against the git-markdown
@@ -91,7 +91,7 @@ class Handlers:
 
 
 KB_REPO = config.KB_REPO
-app = FastAPI(title="teamkb", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="know", docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(build_router(config.SECRET, Handlers(KB_REPO)))
 
 
@@ -103,7 +103,7 @@ CURATE = {"writes": 0, "last_run": 0.0, "scheduled": False}
 CURATE_MIN_SECS = int(os.environ.get("BRAIN_CURATE_MIN_SECS", "300"))
 CURATE_DEBOUNCE = int(os.environ.get("BRAIN_CURATE_DEBOUNCE_SECS", "20"))
 SPRITE_SOCK = os.environ.get("SPRITE_SOCK", "/.sprite/api.sock")
-KEEPALIVE = "teamkb-curating"
+KEEPALIVE = "know-curating"
 
 
 async def _sprite_api(method: str, path: str, payload: dict | None = None):
@@ -150,7 +150,7 @@ def note_write(n: int = 1):
 # --- endpoints ----------------------------------------------------------------
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok", "service": "teamkb", "brain": config.BRAIN_NAME}
+    return {"status": "ok", "service": "know", "brain": config.BRAIN_NAME}
 
 
 # --- viewer: the OKF static graph visualizer over the curated bundle ---------
@@ -180,7 +180,7 @@ async def _alert(text: str):
         return
     try:
         async with httpx.AsyncClient(timeout=10) as c:
-            await c.post(hook, json={"text": f"[teamkb:{config.BRAIN_NAME}] {text}"})
+            await c.post(hook, json={"text": f"[know:{config.BRAIN_NAME}] {text}"})
     except Exception:  # noqa: BLE001
         pass
 

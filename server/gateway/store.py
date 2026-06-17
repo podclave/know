@@ -70,8 +70,8 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# OKF-recommended fields first (type required; resource omitted — teamkb facts are
-# rarely resource-bound), then teamkb extension keys (OKF allows + preserves these).
+# OKF-recommended fields first (type required; resource omitted — know facts are
+# rarely resource-bound), then know extension keys (OKF allows + preserves these).
 _FM_ORDER = ("type", "title", "description", "resource", "tags", "timestamp",
              "author", "surface", "source", "id")
 

@@ -333,7 +333,7 @@ def _resolver_identity(actor: str):
     as human."""
     name = (actor or "unknown").strip() or "unknown"
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "unknown"
-    return (name, f"{slug}@teammate.teamkb.local")
+    return (name, f"{slug}@teammate.know.local")
 
 
 def resolve_contradiction(repo: Path, ident: str, decision: str, *, text: str | None = None,

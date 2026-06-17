@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""teamkb passive capture — single-file (stdlib only) Claude Code hook client.
+"""know passive capture — single-file (stdlib only) Claude Code hook client.
 
 OPTIONAL nicety. The design relies only on MODEL-initiated capture via the MCP
 `save` tool (spec §6.2); this hook nudges passive capture on the CLI surface and
@@ -25,8 +25,8 @@ import urllib.request
 
 HOME = os.path.expanduser("~")
 SELF = os.path.abspath(__file__)
-STATE = os.path.join(HOME, ".claude", ".teamkb")
-GUARD = "TEAMKB_AGENT"  # set on the distiller's claude -p; every hook checks + bails
+STATE = os.path.join(HOME, ".claude", ".know")
+GUARD = "KNOW_AGENT"  # set on the distiller's claude -p; every hook checks + bails
 
 # This phrase lives in INSTRUCTION *and* is the transcript skip-guard, so the two
 # can't drift (a single literal): the SessionStart-style sweep / distiller must never
@@ -188,7 +188,7 @@ def do_distill(sid, transcript):
             pass
     open(offset_file, "w").write(str(total))
     if count:
-        print("[teamkb] captured %d learning(s) from session %s" % (count, sid), file=sys.stderr)
+        print("[know] captured %d learning(s) from session %s" % (count, sid), file=sys.stderr)
 
 
 def detach(*args):

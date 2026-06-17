@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-brain.sh — stand up one teamkb brain on a Sprite. Idempotent; brain #N is
+# install-brain.sh — stand up one know brain on a Sprite. Idempotent; brain #N is
 # a re-run on a fresh Sprite (Gate A). Every step is green/red and re-asserts on re-run.
 #
 #   bash server/install-brain.sh [brain-name]
@@ -8,19 +8,19 @@
 # sk- line), a Sprite with url_access=public, and `gh` auth if you want the mirror.
 # The key is set ONLY on the service env (spec §9.8) — never your interactive shell.
 set -euo pipefail
-log(){ printf '\033[1;36m[teamkb]\033[0m %s\n' "$*"; }
-ok(){  printf '\033[1;32m[teamkb] OK:\033[0m %s\n' "$*"; }
-die(){ printf '\033[1;31m[teamkb] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+log(){ printf '\033[1;36m[know]\033[0m %s\n' "$*"; }
+ok(){  printf '\033[1;32m[know] OK:\033[0m %s\n' "$*"; }
+die(){ printf '\033[1;31m[know] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CLAUDE_FLOOR="${CLAUDE_FLOOR:-2.1.92}"
-BRAIN_NAME="${1:-$(sprite-env info 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("sprite_name","teamkb"))' 2>/dev/null || echo teamkb)}"
-GW_DIR="$HOME/teamkb-gateway"
-KB_REPO="${BRAIN_KB_REPO:-$HOME/teamkb-kb}"
-STATE_DIR="$HOME/.teamkb"
+BRAIN_NAME="${1:-$(sprite-env info 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("sprite_name","know"))' 2>/dev/null || echo know)}"
+GW_DIR="$HOME/know-gateway"
+KB_REPO="${BRAIN_KB_REPO:-$HOME/know-kb}"
+STATE_DIR="$HOME/.know"
 KEY_FILE="${ANTHROPIC_API_KEY_FILE:-$HOME/ANTHROPIC_API_KEY}"
 PORT=8080
-SERVICE=teamkb
+SERVICE=know
 
 # --- 0. preflight ------------------------------------------------------------
 # No node / system `claude` needed: the Claude Agent SDK bundles a native CLI in the venv.
@@ -89,7 +89,7 @@ if [ ! -d "$KB_REPO/.git" ]; then
   # curated/ is the OKF bundle; seed its bundle-root index.md (the secretary owns it)
   printf -- '---\nokf_version: "0.1"\n---\n\n# Knowledge base index\n\n_(empty — facts appear here as the secretary curates them)_\n' > "$KB_REPO/curated/index.md"
   git -C "$KB_REPO" add -A
-  git -C "$KB_REPO" -c user.name=teamkb-capture -c user.email=capture@teamkb.local \
+  git -C "$KB_REPO" -c user.name=know-capture -c user.email=capture@know.local \
     commit -q -m "capture: init knowledge base (OKF bundle in curated/)"
 fi
 # record the resolved model + claude version onto the ONE config line (§5.2, §10.3)
@@ -103,7 +103,7 @@ open(path, 'w').write(s)
 PY
 git -C "$KB_REPO" add CLAUDE.md
 git -C "$KB_REPO" diff --cached --quiet || \
-  git -C "$KB_REPO" -c user.name=teamkb-secretary -c user.email=secretary@teamkb.local \
+  git -C "$KB_REPO" -c user.name=know-secretary -c user.email=secretary@know.local \
     commit -q -m "secretary: pin model=$MODEL claude=$CLAUDE_VER"
 ok "KB repo ready ($KB_REPO); model+version recorded in CLAUDE.md"
 
@@ -114,7 +114,7 @@ if [ -n "${BRAIN_NO_MIRROR:-}" ]; then
   MIRROR_SLUG=""
 elif [ -z "$MIRROR_SLUG" ] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   GH_USER="$(gh api user -q .login 2>/dev/null || true)"
-  [ -n "$GH_USER" ] && MIRROR_SLUG="$GH_USER/teamkb-kb-$BRAIN_NAME"
+  [ -n "$GH_USER" ] && MIRROR_SLUG="$GH_USER/know-kb-$BRAIN_NAME"
 fi
 if [ -n "$MIRROR_SLUG" ]; then
   if ! git -C "$KB_REPO" remote | grep -qx mirror; then
@@ -186,7 +186,7 @@ PUB_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SPRITE_URL/he
 # --- 11. CLI save/recall smoke (the tools FIRE, not just connect, §9.7) ------
 log "CLI smoke: save + recall a canary through the live MCP tools..."
 SMOKE="/mcp/$SECRET/install-smoke/"
-save_body='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"save","arguments":{"title":"Install canary","body":"teamkb install smoke test canary fact."}}}'
+save_body='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"save","arguments":{"title":"Install canary","body":"know install smoke test canary fact."}}}'
 save_out="$(curl -s "http://localhost:$PORT$SMOKE" -d "$save_body")"
 echo "$save_out" | grep -q '"isError"' && die "save smoke returned an error: $save_out"
 echo "$save_out" | grep -q 'Saved' || die "save smoke did not confirm: $save_out"
@@ -207,21 +207,30 @@ BASE_URL="$SPRITE_URL/mcp/$SECRET"
 cat <<EOF
 
 =========================================================================
-  teamkb brain "$BRAIN_NAME" is UP and GREEN.
+  know brain "$BRAIN_NAME" is UP and GREEN.
   -------------------------------------------------------------------
-  Connect URL (each teammate appends their own name for attribution):
+  Your personal connector URL (the URL IS the credential — treat like a password):
 
       $BASE_URL/<your-name>/
 
-  • Claude Code:   claude mcp add --transport http teamkb "$BASE_URL/<your-name>/"
-  • claude.ai / Desktop / Cowork (Team/Enterprise):
-      An ORG OWNER adds the URL once as a custom connector (a non-owner can't);
-      then each member adds the same URL and toggles it ON per-conversation via
-      + -> Connectors. A fresh chat with it OFF returns nothing — and empty
-      recall looks identical to "the brain knows nothing", so toggle it on.
+  RECOMMENDED — Claude Code plugin (one install: tools + /know: commands + capture):
+      claude plugin marketplace add <owner>/know   # the published 'know' repo (or a local path)
+      claude plugin install know@know --config brain_mcp_url="$BASE_URL/<your-name>/"
+      claude plugin enable know@know
+    Your URL goes to Claude Code secure storage (never committed). For a team repo,
+    commit .claude/settings.json with extraKnownMarketplaces + "enabledPlugins":
+    {"know@know":true} + permissions.allow for the READ tools
+    (mcp__plugin_know_know__recall / __list / __contradictions) — auto-enables
+    per-PROJECT on clone+trust; save/supersede/resolve still prompt.
 
-  The URL IS the credential (secret-in-path). Treat it like a password; rotate
-  by re-running with a new secret + re-issuing this card.
+  ALTERNATIVE — bare connector (no /know: commands or capture):
+      claude mcp add --transport http --scope local know "$BASE_URL/<your-name>/"
+
+  claude.ai / Cowork: NOT RECOMMENDED — the same URL connects, but claude.ai
+  connectors are account-global (on in every project, not per-project) and need
+  manual Settings tweaks before tools load. Use Claude Code.
+
+  Rotate the secret by re-running install with a fresh secret + re-issuing this card.
   -------------------------------------------------------------------
   Browse the brain as an interactive knowledge graph (OKF visualizer) at:
 

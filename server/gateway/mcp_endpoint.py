@@ -1,4 +1,4 @@
-"""MCP-over-HTTP endpoint (stateless Streamable HTTP) for the teamkb brain.
+"""MCP-over-HTTP endpoint (stateless Streamable HTTP) for the know brain.
 
 Lifted from podbrain's gateway/mcp_endpoint.py — the JSON-RPC / Streamable-HTTP
 layer (initialize / ping / tools/list / tools/call, notification->202, error
@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse, Response
 
 PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", "2025-06-18"}
 LATEST_PROTOCOL = "2025-06-18"
-SERVER_INFO = {"name": "teamkb", "version": "1.0.0"}
+SERVER_INFO = {"name": "know", "version": "1.0.0"}
 
 
 def _t(name, description, properties, required=None):
@@ -228,7 +228,7 @@ def build_router(secret: str, handlers) -> APIRouter:
                 # visible to the model (a down brain is a tool error, never silent)
                 return _rpc(msg_id, result={
                     "isError": True,
-                    "content": [{"type": "text", "text": f"teamkb call failed: {e}"}]})
+                    "content": [{"type": "text", "text": f"know call failed: {e}"}]})
             return _rpc(msg_id, result=_tool_result(payload))
         return _err(msg_id, -32601, f"method not found: {method}")
 
