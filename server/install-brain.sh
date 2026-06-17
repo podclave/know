@@ -59,6 +59,7 @@ ok "claude $CLAUDE_VER (floor $CLAUDE_FLOOR)"
 # --- 3. deploy the gateway code + venv ---------------------------------------
 mkdir -p "$GW_DIR"
 cp "$HERE/gateway/"*.py "$HERE/gateway/requirements.txt" "$GW_DIR/"
+rm -rf "$GW_DIR/viewer"; cp -r "$HERE/gateway/viewer" "$GW_DIR/"   # OKF graph visualizer assets
 [ -d "$GW_DIR/.venv" ] || { log "creating gateway venv"; python3 -m venv "$GW_DIR/.venv"; }
 log "installing gateway deps"
 "$GW_DIR/.venv/bin/pip" install -q --no-cache-dir --upgrade pip >/dev/null
@@ -222,6 +223,13 @@ cat <<EOF
 
   The URL IS the credential (secret-in-path). Treat it like a password; rotate
   by re-running with a new secret + re-issuing this card.
+  -------------------------------------------------------------------
+  Browse the brain as an interactive knowledge graph (OKF visualizer) at:
+
+      $SPRITE_URL/viewer/$SECRET/
+
+  (same secret-in-path; open in a browser — click a node to read the fact and
+  follow its cross-links.)
   -------------------------------------------------------------------
   Heartbeat: add an external pinger (Podclave Schedule / GitHub Actions cron /
   uptime monitor), hourly, that POSTs to:

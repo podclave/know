@@ -1,0 +1,12 @@
+The OKF bundle visualizer in this directory is derived from the Open Knowledge
+Format reference implementation:
+
+  https://github.com/GoogleCloudPlatform/knowledge-catalog
+  okf/src/enrichment_agent/viewer/  (Apache License 2.0)
+
+- templates/viz.html, static/viz.css, static/viz.js — vendored verbatim.
+- generator.py — adapted: parses frontmatter with teamkb's own store.parse_md
+  (no enrichment_agent dependency), uses teamkb's concept-type palette, and
+  returns the HTML as a string for on-demand serving.
+
+Licensed under the Apache License, Version 2.0.

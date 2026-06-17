@@ -87,6 +87,14 @@ own name). Hooking in is adding that URL; the per-surface friction is connector
 Then just use Claude normally: it recalls when you ask about the team/project and saves
 durable facts as they come up. You never see a repo, sync, or file.
 
+## Browse the brain (OKF visualizer)
+
+Open `https://<brain>.sprites.app/viewer/<secret>/` in a browser for an interactive
+graph of the curated knowledge base — nodes are concepts (colored by `type`), edges are
+the cross-links; click a node to read the fact and follow its links. It's the OKF static
+visualizer rendered on demand from the live bundle; same secret-in-path as the connector
+(treat the URL like a password), no backend, nothing leaves the browser.
+
 ## Keeping it alive
 
 A brain spins down when idle and auto-resumes on first connect. Normal capture wakes

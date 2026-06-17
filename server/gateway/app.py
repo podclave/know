@@ -11,12 +11,14 @@ the box can't see — an off-box mirror push — rides the external /wake pinger
 also runs the auth probe + a curator-liveness check and alerts on auth failure.
 """
 import asyncio
+import hmac
 import os
 import time
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
 import config
 from boot_check import auth_probe
@@ -24,6 +26,7 @@ from mcp_endpoint import build_router
 from recall import recall as recall_agent
 from secretary import run_pass
 from store import GitStore, _git
+from viewer.generator import generate_html
 
 
 # --- handlers: adapt store + recall to the MCP transport, formatting for the model -
@@ -120,6 +123,25 @@ def note_write(n: int = 1):
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok", "service": "teamkb", "brain": config.BRAIN_NAME}
+
+
+# --- viewer: the OKF static graph visualizer over the curated bundle ---------
+# Secret-gated by the SAME capability-URL pattern as /mcp (the secret is in the path,
+# wrong/missing -> plain 404). Renders the curated/ OKF bundle as a self-contained
+# interactive graph; generated on demand so it's always current.
+def _viewer_html() -> str:
+    return generate_html(KB_REPO / "curated", bundle_name=config.BRAIN_NAME)
+
+
+async def _viewer(path_secret: str):
+    if not (config.SECRET and hmac.compare_digest(path_secret.encode(), config.SECRET.encode())):
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    html = await asyncio.to_thread(_viewer_html)
+    return HTMLResponse(html)
+
+
+app.add_api_route("/viewer/{path_secret}/", _viewer, methods=["GET"])
+app.add_api_route("/viewer/{path_secret}", _viewer, methods=["GET"])
 
 
 async def _alert(text: str):
