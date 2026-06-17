@@ -1,0 +1,17 @@
+{
+  "name": "teamkb-capture",
+  "version": "0.1.0",
+  "description": "Optional passive capture for teamkb — distills durable team facts from each Claude Code session and saves them to your team brain. Recall/save still work without this (the brain is added as an MCP connector by URL); this just nudges capture on the CLI surface.",
+  "author": { "name": "teamkb" },
+  "license": "MIT",
+  "defaultEnabled": false,
+  "userConfig": {
+    "brain_mcp_url": {
+      "type": "string",
+      "title": "Brain MCP URL",
+      "description": "Your full teamkb connector URL including your name, e.g. https://my-brain.sprites.app/mcp/<secret>/<your-name>/ . The URL IS the credential — treat it like a password.",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

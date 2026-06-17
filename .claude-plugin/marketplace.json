@@ -1,0 +1,11 @@
+{
+  "name": "teamkb",
+  "owner": { "name": "teamkb" },
+  "plugins": [
+    {
+      "name": "teamkb-capture",
+      "source": "./client-plugin",
+      "description": "Optional passive capture: distill durable team facts from each Claude Code session into your team brain. The brain itself is added as an MCP connector by URL — this plugin is a CLI-only nicety the design does not rely on."
+    }
+  ]
+}
