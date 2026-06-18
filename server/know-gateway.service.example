@@ -1,0 +1,27 @@
+# Example systemd unit for running know on a plain Linux host (not a Sprite).
+# Copy to /etc/systemd/system/know-gateway.service, edit paths/env, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now know-gateway
+#
+# Pair with an external /wake pinger (see examples/github-actions-wake.yml).
+
+[Unit]
+Description=know team brain gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=know
+Group=know
+WorkingDirectory=/home/know/know-gateway
+Environment=ANTHROPIC_API_KEY_FILE=/home/know/ANTHROPIC_API_KEY
+Environment=KNOW_SECRET=replace-with-your-mcp-secret
+Environment=KNOW_NAME=know
+Environment=KNOW_MODEL=claude-haiku-4-5-20251001
+ExecStart=/home/know/know-gateway/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

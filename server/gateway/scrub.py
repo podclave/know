@@ -1,9 +1,14 @@
-"""Secret-redaction backstop — lifted from podbrain's brain.py SCRUB/scrub().
+"""Secret-redaction backstop — canonical patterns for the gateway (vendored, standalone).
 
 Defense-in-depth on a SHARED git repo: one leaked credential is everyone's
-problem. This runs on every fact body BEFORE it is committed (mandatory), behind
-the LLM "no secrets" instruction the secretary/capture prompts carry. Specific
-patterns first, broad ones last.
+problem. Runs on every fact body BEFORE it is committed (mandatory), behind
+the LLM "no secrets" instruction the secretary/capture prompts carry.
+Specific patterns first, broad ones last.
+
+The install copies only server/gateway/*.py to ~/know-gateway — this module
+must not depend on client-plugin/ or any path outside the deploy dir.
+client-plugin/scrub.py mirrors these patterns for the capture hook; test_scrub.py
+enforces parity.
 """
 import re
 
