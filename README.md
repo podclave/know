@@ -19,11 +19,11 @@ account-global and needs manual settings — prefer Claude Code (see Connect bel
 ## How it works
 
 ```
-   external pinger (hourly) ──poke──▶  <brain>/wake   (auth probe · pull mirror · reconcile · liveness)
+   external pinger (hourly) ──poke──▶  <brain>/wake   (auth probe · pull remote · reconcile · liveness)
                                           │
    ┌──────────────────────────────────────▼─────────────────────────────┐
    │  BRAIN — one Sprite, a supervised FastAPI MCP-over-HTTP service       │
-   │   • git repo of markdown facts = the truth  → optional private mirror │
+   │   • git repo of markdown facts = the truth  → optional remote backup │
    │   • recall   — a cheap `claude` agent greps/reads the repo            │
    │   • save/list/supersede — write tools, scrubbed + committed to git     │
    │   • secretary — a `claude` that promotes raw→curated, dedupes, queues  │
@@ -59,15 +59,21 @@ On a **public** Sprite (or any host — see below) with an `ANTHROPIC_API_KEY` a
 (default: the `sk-` line of `~/ANTHROPIC_API_KEY`):
 
 ```bash
-bash server/install-brain.sh [brain-name]
+bash server/install-brain.sh [brain-name] [--no-remote]
 ```
+
+You must either point the brain at a git remote it can push to — `export
+BRAIN_REMOTE_URL=<clone url>` (any host; a repo you created and can push to) — or pass
+`--no-remote` to run local-only on purpose. That remote is your backup **and** your
+restore source (see **Backup & restore** below); the installer verifies it before doing
+the slow work, and fails fast with help if it's missing or unreachable.
 
 Idempotent — safe to re-run; standing up brain #N is the same command on a fresh host.
 No Node or system `claude` needed: the agent runtime is the **Claude Agent SDK's bundled
 native CLI**, installed into the gateway venv by `pip` — self-contained, version-pinned
 by the SDK, and isolated from any interactive `claude` on the box. The installer pins the
-cheapest dated model id + records the bundled CLI version, mints the secret, inits the git
-repo (and a private `gh` mirror unless `BRAIN_NO_MIRROR=1`), creates the supervised service
+cheapest dated model id + records the bundled CLI version, mints the secret, sets up the KB
+git repo (seed a fresh one, restore from your remote, or `--no-remote`), creates the supervised service
 with the API key scoped to it, runs an **ordered boot self-check** (auth → agent runtime →
 model-resolves — refuses to report green on any failure), smoke-tests a real save+recall,
 and prints an onboarding card with your connect URL and the `/wake` heartbeat URL.
@@ -77,8 +83,24 @@ the same script stands a brain up on a plain VM — e.g. a DigitalOcean droplet 
 Sprite. (The `sprite-env` service wrapper is the one Sprite-specific piece; on another host
 run the gateway under any supervisor.)
 
-Useful env: `BRAIN_GITHUB_MIRROR=owner/repo`, `BRAIN_NO_MIRROR=1`,
+Useful env: `BRAIN_REMOTE_URL=<clone url>` (or `--no-remote`),
 `BRAIN_ALERT_WEBHOOK=<slack-webhook>` (auth-failure alerts), `CLAUDE_FLOOR=2.1.92`.
+
+## Backup & restore (the git remote)
+
+The KB is always a local git repo — *the truth*. Point it at a remote and that remote
+becomes both a **backup** (every save/curation pushes to it) and a **restore source**:
+
+- **Empty remote** → the installer seeds it from a fresh KB.
+- **Existing remote (has history)** → the installer **clones it back**. So if a box dies,
+  re-running `install-brain.sh <name>` with the *same* `BRAIN_REMOTE_URL` stands up a
+  replacement with the whole KB — facts, history, contradictions — restored. That's the point.
+- **`--no-remote`** → explicit local-only: no backup, no restore, no off-box editing.
+
+You bring the repo and the git auth; the installer **verifies** it (reachable, and a real
+push succeeds) but never creates or names a repo for you. Any host works — GitHub, GitLab,
+self-hosted — via `git@…` or `https://…`. For SSH it trusts the host on first use, so make
+sure this box has a key/credential that can push.
 
 ## Connect (Claude Code)
 
@@ -143,9 +165,9 @@ visualizer rendered on demand from the live bundle; same secret-in-path as the c
 
 A brain spins down when idle and auto-resumes on first connect. Normal capture wakes
 the box and triggers curation. The one event the box can't see — an off-box edit pushed
-to the mirror — rides an **external pinger** (Podclave Schedule, GitHub Actions cron, or
+to the remote — rides an **external pinger** (Podclave Schedule, GitHub Actions cron, or
 any uptime monitor) that POSTs to `<brain>/wake` hourly: it runs the auth probe (and
-alerts on failure), pulls the mirror, reconciles human edits, and reports curator
+alerts on failure), pulls the remote, reconciles human edits, and reports curator
 liveness. A spun-down box can't cron itself, so this pinger is required.
 
 ## Passive capture (part of the plugin)
@@ -157,7 +179,7 @@ reuses the same `brain_mcp_url` you set at install, so there's nothing extra to 
 
 ## Editing the brain directly (power users)
 
-Clone the mirror, edit any fact, commit, push. The secretary detects your edit by git
+Clone the remote, edit any fact, commit, push. The secretary detects your edit by git
 author and treats it as **authoritative** — it never clobbers a human edit, and a machine
 fact that contradicts yours becomes an open record in `contradictions/` (recall flags it
 as disputed; `/wake` reports the open count). Editing the disputed fact **closes** the

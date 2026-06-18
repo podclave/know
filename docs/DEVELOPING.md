@@ -152,8 +152,8 @@ with 9 resolving cross-links, 0 broken; idempotent on re-run.
 - **Capture is uniform-by-reliance, not in-practice** — only model-initiated capture is
   load-bearing; the CC plugin nudges it but web/cowork have no hook, so a cowork-heavy
   team builds a thinner brain unless a power user feeds it.
-- **Reconcile latency = one heartbeat interval** — an off-box mirror push isn't seen
-  until the next `/wake`. The immediate fix (a GitHub webhook → `/wake`) is intentionally
+- **Reconcile latency = one heartbeat interval** — an off-box remote push isn't seen
+  until the next `/wake`. The immediate fix (a git-host webhook → `/wake`) is intentionally
   deferred; hard-skip + optimistic concurrency already remove clobber risk.
 - **Attribution is self-asserted**, the secret is shared, and the bot/human classifier
   is forgery-resistant not -proof — all fine for a trusted team, all out of the threat

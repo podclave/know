@@ -2,10 +2,11 @@
 # install-brain.sh — stand up one know brain on a Sprite. Idempotent; brain #N is
 # a re-run on a fresh Sprite (Gate A). Every step is green/red and re-asserts on re-run.
 #
-#   bash server/install-brain.sh [brain-name]
+#   bash server/install-brain.sh [brain-name] [--no-remote]
 #
 # Needs (runtime, not files): an ANTHROPIC_API_KEY (default: ~/ANTHROPIC_API_KEY, the
-# sk- line), a Sprite with url_access=public, and `gh` auth if you want the mirror.
+# sk- line), a Sprite with url_access=public, and EITHER a git remote you can push to
+# (export BRAIN_REMOTE_URL=<clone url>) OR --no-remote to run local-only on purpose.
 # The key is set ONLY on the service env (spec §9.8) — never your interactive shell.
 set -euo pipefail
 log(){ printf '\033[1;36m[know]\033[0m %s\n' "$*"; }
@@ -13,14 +14,138 @@ ok(){  printf '\033[1;32m[know] OK:\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31m[know] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# --- args + config -----------------------------------------------------------
+NO_REMOTE=""; POSARGS=()
+for a in "$@"; do
+  case "$a" in
+    --no-remote) NO_REMOTE=1 ;;
+    --*) die "unknown flag: $a (usage: install-brain.sh [brain-name] [--no-remote])" ;;
+    *) POSARGS+=("$a") ;;
+  esac
+done
+[ -n "${BRAIN_NO_REMOTE:-}" ] && NO_REMOTE=1
+[ -n "${BRAIN_NO_MIRROR:-}" ] && NO_REMOTE=1   # back-compat alias (deprecated)
+
 CLAUDE_FLOOR="${CLAUDE_FLOOR:-2.1.92}"
-BRAIN_NAME="${1:-$(sprite-env info 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("sprite_name","know"))' 2>/dev/null || echo know)}"
+BRAIN_NAME="${POSARGS[0]:-$(sprite-env info 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("sprite_name","know"))' 2>/dev/null || echo know)}"
 GW_DIR="$HOME/know-gateway"
 KB_REPO="${BRAIN_KB_REPO:-$HOME/know-kb}"
 STATE_DIR="$HOME/.know"
 KEY_FILE="${ANTHROPIC_API_KEY_FILE:-$HOME/ANTHROPIC_API_KEY}"
+REMOTE_URL="${BRAIN_REMOTE_URL:-}"
 PORT=8080
 SERVICE=know
+# Trust-on-first-use for SSH remotes (a fresh box has no known_hosts → push would hang).
+SSH_CMD="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20}"
+
+# --- KB repo + remote: resolve, then adopt-or-seed (the "git is the truth") ---
+# The brain ALWAYS has a local git repo (KB_REPO = the truth). A remote is optional
+# but, when present, is BOTH a backup destination AND a restore source: point a fresh
+# box at the same BRAIN_REMOTE_URL and it clones the whole KB back. We never create or
+# auto-name a remote — you bring a repo you can push to (any host), and we verify it.
+resolve_remote() {            # sets REMOTE_MODE (local|remote), REMOTE_HAS_COMMITS, REMOTE_URL
+  REMOTE_MODE=local; REMOTE_HAS_COMMITS=""
+  if [ -n "$NO_REMOTE" ]; then
+    log "remote: --no-remote → LOCAL-ONLY (no off-box backup, restore, or editing)"
+    return 0
+  fi
+  # re-run convenience: adopt the remote already wired into an existing KB
+  if [ -z "$REMOTE_URL" ] && [ -d "$KB_REPO/.git" ]; then
+    REMOTE_URL="$(git -C "$KB_REPO" remote get-url mirror 2>/dev/null || true)"
+    [ -n "$REMOTE_URL" ] && log "remote: reusing the KB's existing 'mirror' → $REMOTE_URL"
+  fi
+  if [ -z "$REMOTE_URL" ]; then
+    die "No KB remote configured.
+  A know brain should back its git repo to a remote you control — for durability,
+  restore-on-a-new-box, and the off-box editing path. Either provide one:
+      export BRAIN_REMOTE_URL=<clone url>     # a repo you created and can push to,
+                                              # e.g. git@github.com:you/know-kb.git
+                                              #  or  https://githost/you/know-kb.git
+  (ensure this box's git auth — an SSH key in the agent, or a credential helper — can
+  push to it), OR re-run with --no-remote to run local-only on purpose."
+  fi
+  local out
+  if ! out="$(GIT_SSH_COMMAND="$SSH_CMD" git ls-remote "$REMOTE_URL" 2>&1)"; then
+    die "can't reach or authenticate the remote: $REMOTE_URL
+  $out
+  Make sure the repo exists and this box's git credentials (SSH key / helper) can
+  access it — or re-run with --no-remote."
+  fi
+  REMOTE_MODE=remote
+  if [ -n "$out" ]; then
+    REMOTE_HAS_COMMITS=1
+    log "remote: $REMOTE_URL (has history — will RESTORE if the local KB is absent)"
+  else
+    log "remote: $REMOTE_URL (empty — will SEED it from a fresh KB)"
+  fi
+}
+
+_remote_writable() {          # prove push access without touching real refs
+  local ref="refs/heads/_know-write-check"
+  GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" push mirror "HEAD:$ref" >/dev/null 2>&1 || return 1
+  GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" push mirror ":$ref" >/dev/null 2>&1 || true
+  return 0
+}
+
+_seed_kb() {                  # fresh KB skeleton (OKF bundle) + first commit
+  mkdir -p "$KB_REPO"/{raw,curated,_superseded,contradictions}
+  git -C "$KB_REPO" init -q -b main 2>/dev/null || git -C "$KB_REPO" init -q
+  for d in raw _superseded contradictions; do touch "$KB_REPO/$d/.gitkeep"; done
+  cp "$HERE/kb-template/CLAUDE.md" "$KB_REPO/CLAUDE.md"
+  printf -- '---\nokf_version: "0.1"\n---\n\n# Knowledge base index\n\n_(empty — facts appear here as the secretary curates them)_\n' > "$KB_REPO/curated/index.md"
+  git -C "$KB_REPO" add -A
+  git -C "$KB_REPO" -c user.name=know-capture -c user.email=capture@know.local \
+    commit -q -m "capture: init knowledge base (OKF bundle in curated/)"
+}
+
+setup_kb() {
+  if [ -d "$KB_REPO/.git" ]; then
+    log "KB repo exists at $KB_REPO — reusing"
+    if [ "$REMOTE_MODE" = remote ]; then
+      if git -C "$KB_REPO" remote | grep -qx mirror; then
+        git -C "$KB_REPO" remote set-url mirror "$REMOTE_URL"
+      else
+        git -C "$KB_REPO" remote add mirror "$REMOTE_URL"
+      fi
+      GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" pull --ff-only mirror >/dev/null 2>&1 || true
+    fi
+  elif [ "$REMOTE_MODE" = remote ] && [ -n "$REMOTE_HAS_COMMITS" ]; then
+    log "restoring KB from remote → $KB_REPO"
+    GIT_SSH_COMMAND="$SSH_CMD" git clone "$REMOTE_URL" "$KB_REPO" >/dev/null 2>&1 \
+      || die "clone (restore) failed from $REMOTE_URL — check access, or --no-remote."
+    [ -d "$KB_REPO/.git" ] || die "clone (restore) produced no repo at $KB_REPO"
+    git -C "$KB_REPO" remote | grep -qx origin && git -C "$KB_REPO" remote rename origin mirror || true
+    git -C "$KB_REPO" remote | grep -qx mirror || git -C "$KB_REPO" remote add mirror "$REMOTE_URL"
+    for d in raw curated _superseded contradictions; do mkdir -p "$KB_REPO/$d"; done
+    ok "restored KB from remote ($(git -C "$KB_REPO" rev-list --count HEAD 2>/dev/null || echo '?') commits)"
+  else
+    log "initializing a fresh KB repo at $KB_REPO"
+    _seed_kb
+    if [ "$REMOTE_MODE" = remote ]; then
+      git -C "$KB_REPO" remote add mirror "$REMOTE_URL"
+      GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" push -u mirror HEAD >/dev/null 2>&1 \
+        || die "seeded the local KB but PUSH to $REMOTE_URL failed — no write access, or
+  the repo already has unrelated history (use an EMPTY repo you can push to). Or --no-remote."
+      ok "seeded remote $REMOTE_URL"
+    fi
+  fi
+  # confirm the remote is actually writable (so backups will push); local stays the truth
+  if [ "$REMOTE_MODE" = remote ]; then
+    if _remote_writable; then ok "remote is reachable + writable: $REMOTE_URL"
+    else log "WARN: $REMOTE_URL is reachable but NOT writable from this box — new facts
+  won't back up (the local repo is still the truth). Fix this box's git push auth."; fi
+  fi
+}
+
+# --- TEST SEAM: exercise just the KB/remote logic (no service/venv/key needed) ----
+# KB_SETUP_TEST=1 BRAIN_KB_REPO=… [BRAIN_REMOTE_URL=… | --no-remote] bash install-brain.sh
+if [ -n "${KB_SETUP_TEST:-}" ]; then
+  command -v git >/dev/null 2>&1 || die "git required"
+  resolve_remote
+  setup_kb
+  ok "KB_SETUP_TEST done (mode=$REMOTE_MODE)"
+  exit 0
+fi
 
 # --- 0. preflight ------------------------------------------------------------
 # No node / system `claude` needed: the Claude Agent SDK bundles a native CLI in the venv.
@@ -47,6 +172,9 @@ if [ -n "$URL_ACCESS" ] && [ "$URL_ACCESS" != "public" ]; then
   die "Sprite url_access is '$URL_ACCESS', must be 'public' — web connectors dial from Anthropic's cloud and would silently fail (§9.6)"
 fi
 ok "Sprite is public: $SPRITE_URL"
+
+# --- 1b. resolve + verify the KB remote EARLY (fail fast before the slow deploy) --
+resolve_remote
 
 # --- 2. deploy the gateway code + venv (the SDK brings the agent runtime) ----
 mkdir -p "$GW_DIR"
@@ -79,19 +207,8 @@ if [ ! -f "$SECRET_FILE" ]; then
 fi
 SECRET="$(cat "$SECRET_FILE")"
 
-# --- 6. init the KB data repo (raw/, curated/=OKF bundle, _superseded/, contradictions/) --
-if [ ! -d "$KB_REPO/.git" ]; then
-  log "initializing KB data repo at $KB_REPO"
-  mkdir -p "$KB_REPO"/{raw,curated,_superseded,contradictions}
-  git -C "$KB_REPO" init -q
-  for d in raw _superseded contradictions; do touch "$KB_REPO/$d/.gitkeep"; done
-  cp "$HERE/kb-template/CLAUDE.md" "$KB_REPO/CLAUDE.md"
-  # curated/ is the OKF bundle; seed its bundle-root index.md (the secretary owns it)
-  printf -- '---\nokf_version: "0.1"\n---\n\n# Knowledge base index\n\n_(empty — facts appear here as the secretary curates them)_\n' > "$KB_REPO/curated/index.md"
-  git -C "$KB_REPO" add -A
-  git -C "$KB_REPO" -c user.name=know-capture -c user.email=capture@know.local \
-    commit -q -m "capture: init knowledge base (OKF bundle in curated/)"
-fi
+# --- 6. KB data repo: adopt-or-seed (init fresh / restore from remote / reuse) --
+setup_kb
 # record the resolved model + claude version onto the ONE config line (§5.2, §10.3)
 "$PYBIN" - "$KB_REPO/CLAUDE.md" "$MODEL" "$CLAUDE_VER" <<'PY'
 import re, sys
@@ -102,37 +219,12 @@ s = re.sub(r'(?m)^- claude-version:.*$', f'- claude-version: {ver}', s, count=1)
 open(path, 'w').write(s)
 PY
 git -C "$KB_REPO" add CLAUDE.md
-git -C "$KB_REPO" diff --cached --quiet || \
+if ! git -C "$KB_REPO" diff --cached --quiet; then
   git -C "$KB_REPO" -c user.name=know-secretary -c user.email=secretary@know.local \
     commit -q -m "secretary: pin model=$MODEL claude=$CLAUDE_VER"
+  [ "$REMOTE_MODE" = remote ] && GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" push mirror HEAD >/dev/null 2>&1 || true
+fi
 ok "KB repo ready ($KB_REPO); model+version recorded in CLAUDE.md"
-
-# --- 6b. private GitHub mirror (optional, best-effort) -----------------------
-MIRROR_SLUG="${BRAIN_GITHUB_MIRROR:-}"
-if [ -n "${BRAIN_NO_MIRROR:-}" ]; then
-  log "BRAIN_NO_MIRROR set — skipping the GitHub mirror (local repo is the truth)"
-  MIRROR_SLUG=""
-elif [ -z "$MIRROR_SLUG" ] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  GH_USER="$(gh api user -q .login 2>/dev/null || true)"
-  [ -n "$GH_USER" ] && MIRROR_SLUG="$GH_USER/know-kb-$BRAIN_NAME"
-fi
-if [ -n "$MIRROR_SLUG" ]; then
-  if ! git -C "$KB_REPO" remote | grep -qx mirror; then
-    if gh repo view "$MIRROR_SLUG" >/dev/null 2>&1 || \
-       gh repo create "$MIRROR_SLUG" --private --disable-issues --disable-wiki >/dev/null 2>&1; then
-      git -C "$KB_REPO" remote add mirror "https://github.com/$MIRROR_SLUG.git" 2>/dev/null || true
-      git -C "$KB_REPO" push -u mirror HEAD >/dev/null 2>&1 && ok "mirror: $MIRROR_SLUG" \
-        || log "mirror remote added but initial push failed (check gh auth) — local repo is still the truth"
-    else
-      log "could not create/find mirror repo $MIRROR_SLUG — continuing local-only"
-    fi
-  else
-    git -C "$KB_REPO" push mirror HEAD >/dev/null 2>&1 || true
-    ok "mirror already configured"
-  fi
-else
-  log "no GitHub mirror configured (set BRAIN_GITHUB_MIRROR=owner/repo or auth gh) — local-only"
-fi
 
 # --- 7. supervised sprite-env service (key scoped HERE, not the shell) -------
 # pass PATH so the recall/secretary `claude` subprocess (a node app) + git resolve
@@ -204,6 +296,15 @@ ok "CLI save+recall smoke passed (tools fire); canary cleaned up"
 
 # --- 12. onboarding card -----------------------------------------------------
 BASE_URL="$SPRITE_URL/mcp/$SECRET"
+if [ "$REMOTE_MODE" = remote ]; then
+  BACKUP_LINE="Backup + restore: this brain mirrors its KB to
+      $REMOTE_URL
+  To rebuild on a new/replacement box: run install-brain.sh with the SAME
+  BRAIN_REMOTE_URL — it clones the entire KB back (facts, history, contradictions)."
+else
+  BACKUP_LINE="Backup + restore: LOCAL-ONLY (--no-remote) — no off-box backup or restore.
+  Re-run with BRAIN_REMOTE_URL=<a repo you can push to> to enable durability + restore."
+fi
 cat <<EOF
 
 =========================================================================
@@ -237,6 +338,8 @@ cat <<EOF
 
   Rotate the secret by re-running install with a fresh secret + re-issuing this card.
   -------------------------------------------------------------------
+  $BACKUP_LINE
+  -------------------------------------------------------------------
   Browse the brain as an interactive knowledge graph (OKF visualizer) at:
 
       $SPRITE_URL/viewer/$SECRET/
@@ -249,8 +352,8 @@ cat <<EOF
 
       $SPRITE_URL/wake
 
-  (auth probe + mirror-pull + reconcile + curator liveness; a spun-down box
-  can't cron itself, so this is required for off-box human-edit reconcile.)
+  (auth probe + curator liveness; with a remote it also pulls + reconciles off-box
+  edits. A spun-down box can't cron itself, so this is required for off-box reconcile.)
   -------------------------------------------------------------------
   KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================
