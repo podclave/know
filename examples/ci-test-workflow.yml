@@ -1,0 +1,38 @@
+# Copy to .github/workflows/test.yml to enable CI on push/PR.
+# (Workflow files require the GitHub `workflow` OAuth scope to push via API tokens.)
+
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gateway deps
+        run: |
+          cd server/gateway
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt pytest
+
+      - name: pytest (transport, store, secretary, recall, scrub, app)
+        run: |
+          cd server/gateway
+          .venv/bin/python -m pytest -q
+
+  install-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install-know.sh regression (local bare remote, no network)
+        run: bash server/test-install-know.sh

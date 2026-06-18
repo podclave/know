@@ -23,6 +23,8 @@ import sys
 import time
 import urllib.request
 
+from scrub import scrub
+
 HOME = os.path.expanduser("~")
 SELF = os.path.abspath(__file__)
 STATE = os.path.join(HOME, ".claude", ".know")
@@ -44,25 +46,6 @@ INSTRUCTION = (
     "covers. Respond with NOTHING but a JSON array of "
     "{\"title\":\"short title\",\"body\":\"the self-contained fact\"} (or [] if none)."
 )
-
-SCRUB = [
-    (re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', re.S), '[REDACTED-PRIVATE-KEY]'),
-    (re.compile(r'sk-(?:ant-)?[A-Za-z0-9_-]{12,}'), '[REDACTED]'),
-    (re.compile(r'gh[posru]_[A-Za-z0-9]{20,}'), '[REDACTED]'),
-    (re.compile(r'xox[baprs]-[A-Za-z0-9-]{10,}'), '[REDACTED]'),
-    (re.compile(r'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'), '[REDACTED-JWT]'),
-    (re.compile(r'\b([a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:)[^/\s:@]+(@)'), r'\1[REDACTED]\2'),
-    (re.compile(r'AKIA[0-9A-Z]{16}'), '[REDACTED]'),
-    (re.compile(r'([A-Za-z0-9_-]*(?:SECRET|TOKEN|PASSWORD|API_KEY|APIKEY)[A-Za-z0-9_-]*[=:]\s*)[^\s"]+', re.I), r'\1[REDACTED]'),
-    (re.compile(r'\b[0-9a-f]{32,}\b'), '[REDACTED]'),
-]
-
-
-def scrub(s):
-    for rx, rep in SCRUB:
-        s = rx.sub(rep, s)
-    return s
-
 
 def brain_url():
     return (os.environ.get("CLAUDE_PLUGIN_OPTION_MCP_URL")

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from agent import RECALL_BUDGET_USD, collect
 from config import KB_REPO, model_id
+from kb_stats import fact_counts, secretary_behind
 
 RECALL_PROMPT = """Your ONLY job is to answer a recall query over this team knowledge base by \
 searching the files in this repository. Do NOT take any other action.
@@ -40,20 +41,10 @@ itself flags a pending conflict on it.
 QUERY: {query}"""
 
 
-def _counts(repo: Path):
-    def n(sub):
-        d = repo / sub
-        if not d.is_dir():
-            return 0
-        # exclude the reserved OKF index.md so an empty curated bundle reads as 0
-        return len([f for f in d.glob("*.md") if f.name != "index.md"])
-    return n("curated"), n("raw")
-
-
 async def recall(query: str, repo: Path | None = None, model: str | None = None,
                  timeout: int = 120) -> str:
     repo = Path(repo or KB_REPO)
-    curated, raw = _counts(repo)
+    curated, raw = fact_counts(repo)
     # Empty brain: an honest "nothing saved", explicitly NOT a failed lookup (§5.5).
     if curated == 0 and raw == 0:
         return ("(The team knowledge base is empty — nothing has been saved yet. "
@@ -72,7 +63,7 @@ async def recall(query: str, repo: Path | None = None, model: str | None = None,
         raise RuntimeError(f"recall agent failed: {res.error[:300]}")
     text = res.text or "(No relevant facts found in the knowledge base.)"
     # §5.5 count signal: a curated hit can still be incomplete if raw >> curated.
-    if raw and (curated == 0 or raw > max(5, curated * 3)):
+    if secretary_behind(curated, raw):
         text += (f"\n\n— recall signal: {curated} curated fact(s) vs ~{raw} raw "
                  f"candidate(s). If this looks thin, the secretary may be behind; "
                  f"more unorganized facts may exist in raw/.")

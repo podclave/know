@@ -25,6 +25,7 @@ from boot_check import auth_probe
 from mcp_endpoint import build_router
 from recall import recall as recall_agent
 from secretary import contradiction_records, resolve_contradiction, run_pass
+from kb_stats import kb_snapshot
 from store import GitStore, _git
 from viewer.generator import generate_html
 
@@ -170,7 +171,16 @@ def note_write(n: int = 1):
 # --- endpoints ----------------------------------------------------------------
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok", "service": "know", "name": config.NAME}
+    """Liveness + cheap KB inventory for operators (no agent calls)."""
+    stats = await asyncio.to_thread(kb_snapshot, KB_REPO)
+    return {
+        "status": "ok",
+        "service": "know",
+        "name": config.NAME,
+        **stats,
+        "curation_scheduled": CURATE["scheduled"],
+        "curation_writes_pending": CURATE["writes"],
+    }
 
 
 # --- viewer: the OKF static graph visualizer over the curated bundle ---------
@@ -241,9 +251,9 @@ async def wake():
     except Exception as e:  # noqa: BLE001
         out["mirror_error"] = str(e)
 
-    # 3. curator liveness + the human-resolvable contradiction backlog
+    # 3. curator liveness + KB inventory for operators
     age = await asyncio.to_thread(_last_secretary_age)
     out["last_curation_secs_ago"] = round(age) if age is not None else None
-    from secretary import open_contradictions
-    out["open_contradictions"] = len(open_contradictions(KB_REPO))
+    out.update(await asyncio.to_thread(kb_snapshot, KB_REPO))
+    out["curation_scheduled"] = CURATE["scheduled"]
     return out
