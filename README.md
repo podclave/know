@@ -95,7 +95,7 @@ becomes both a **backup** (every save/curation pushes to it) and a **restore sou
 - **Empty remote** → the installer seeds it from a fresh KB.
 - **Existing remote (has history)** → the installer **clones it back**. So if a box dies,
   re-running `install-know.sh --remote <same url>` stands up a replacement with the whole
-  KB — facts, history, contradictions — restored. That's the point.
+  KB — facts, history, contradictions — restored.
 - **`--no-remote`** → explicit local-only: no backup, no restore, no off-box editing.
 
 You bring the repo and the git auth; the installer **verifies** it (reachable, and a real
@@ -130,7 +130,7 @@ know@know` + `claude plugin marketplace remove know`, then redo with `--scope lo
 **3. Verify and use it.** Run `claude` in that folder, then `/know:setup` (confirms the
 connection) — or just ask *"what does the team know about X?"*. The first call may pause a
 moment while an idle brain wakes. From then on Claude recalls when you ask about the
-team/project and saves durable facts as they come up; you never see a repo, sync, or file.
+team/project and saves durable facts as they come up.
 
 **Team repo:** use `--scope project` instead (or commit `.claude/settings.json`) so the
 brain auto-enables **per-project** for everyone on clone + trust:
@@ -152,7 +152,7 @@ The same URL works as a custom connector, but claude.ai connectors are **account
 (enabled in every conversation/project, not per-project) and need a manual Settings tweak
 (Capabilities → Tool access mode) before tools load — and the model is likelier to reach
 for a same-named local folder than the connector. There's no per-project scoping and no
-plugin. Use Claude Code; reach for the web surfaces only if you must.
+plugin. Use Claude Code.
 
 ## Browse the brain (OKF visualizer)
 
