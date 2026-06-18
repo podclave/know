@@ -20,6 +20,11 @@ out="$(KNOW_SETUP_TEST=1 KNOW_KB_REPO="$T/kbX" bash "$INSTALL" 2>&1)"; rc=$?
 echo "$out" | grep -q "No KB remote configured" && ok "prints remote help" || no "missing help text"
 [ ! -d "$T/kbX/.git" ] && ok "did NOT create a repo" || no "should not create a repo"
 
+echo "== unreachable --remote, non-TTY: fail fast, NEVER hang on the deploy-key prompt =="
+out="$(timeout 30 env KNOW_SETUP_TEST=1 KNOW_KB_REPO="$T/kbU" bash "$INSTALL" --remote "$T/nope.git" </dev/null 2>&1)"; rc=$?
+[ $rc -ne 0 ] && [ $rc -ne 124 ] && ok "fails fast (rc=$rc; 124 would be a hang)" || no "should fail fast, got rc=$rc"
+echo "$out" | grep -qiE "can't reach|--no-remote|deploy key" && ok "explains it + points at the deploy-key/--no-remote options" || no "no help text"
+
 echo "== A: --no-remote (local-only) =="
 KNOW_SETUP_TEST=1 KNOW_KB_REPO="$T/kbA" bash "$INSTALL" --no-remote >"$T/a.log" 2>&1; rc=$?
 [ $rc -eq 0 ] && ok "exits 0" || { no "exit $rc"; cat "$T/a.log"; }

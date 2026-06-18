@@ -98,10 +98,11 @@ becomes both a **backup** (every save/curation pushes to it) and a **restore sou
   KB — facts, history, contradictions — restored.
 - **`--no-remote`** → explicit local-only: no backup, no restore, no off-box editing.
 
-You bring the repo and the git auth; the installer **verifies** it (reachable, and a real
-push succeeds) but never creates or names a repo for you. Any host works — GitHub, GitLab,
-self-hosted — via `git@…` or `https://…`. For SSH it trusts the host on first use, so make
-sure this box has a key/credential that can push.
+You bring the repo; the installer **verifies** it (reachable, and a real push succeeds) but
+never creates one for you. Any host works — GitHub, GitLab, self-hosted — via `git@…` or
+`https://…`. If the box can't push yet, an interactive install generates an SSH **deploy
+key** and walks you through adding it (on GitHub: the repo's Settings → Deploy keys, with
+write access) — a least-privilege, per-box credential scoped to that one repo.
 
 ## Connect (Claude Code)
 
