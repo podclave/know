@@ -112,8 +112,8 @@ write access) — a least-privilege, per-box credential scoped to that one repo.
 team runs the brain. This URL **is** the credential — treat it like a password.
 
 **2. Install the `know` plugin, scoped to the folder you want it in.** You get the
-connector + the `/know:recall`, `/know:contradictions`, `/know:resolve` commands + optional
-capture. Use `--scope local` (this folder, just you) — **never** the default `user` scope,
+connector + the `/know:recall`, `/know:ingest`, `/know:contradictions`, `/know:resolve`
+commands + optional capture. Use `--scope local` (this folder, just you) — **never** the default `user` scope,
 which enables the brain in *every* folder you open:
 
 ```
@@ -132,6 +132,12 @@ know@know` + `claude plugin marketplace remove know`, then redo with `--scope lo
 connection) — or just ask *"what does the team know about X?"*. The first call may pause a
 moment while an idle brain wakes. From then on Claude recalls when you ask about the
 team/project and saves durable facts as they come up.
+
+**Bringing in existing docs.** Starting from scattered PRDs, notes, and research? Run
+`/know:ingest <files-or-folder>` — Claude reads the docs from here (local files, or
+whatever your own connectors reach), extracts durable facts, and saves each with its
+source. The secretary then dedupes, organizes, and cross-links them server-side; a large
+load drains over a few minutes.
 
 **Team repo:** use `--scope project` instead (or commit `.claude/settings.json`) so the
 brain auto-enables **per-project** for everyone on clone + trust:

@@ -90,7 +90,7 @@ graph. Follow these rules (they keep the graph honest and the noise low):
    always wins:** a human-edited curated fact is authoritative; a contradicting machine
    fact is queued, never applied over it. When a human edits a disputed concept, the
    record is closed automatically (moved to `contradictions/resolved/`).
-5. Never delete (move to `_superseded/`); stay within the blast-radius cap; keep every
+5. Never delete (move to `_superseded/`); keep every
    pass a single revertable `secretary:` commit. (`curated/index.md`, a missing `type`,
    and contradiction resolution are handled automatically — you don't hand-maintain them.)
 

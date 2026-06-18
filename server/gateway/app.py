@@ -102,6 +102,7 @@ app.include_router(build_router(config.SECRET, Handlers(KB_REPO)))
 CURATE = {"writes": 0, "last_run": 0.0, "scheduled": False}
 CURATE_MIN_SECS = 300       # min seconds between event-driven (on-box) curation passes
 CURATE_DEBOUNCE = 20        # quiet window after a save before a curation pass fires
+CURATE_DRAIN_SECS = 5       # gap before re-firing when raw/ still has backlog to drain
 SPRITE_SOCK = "/.sprite/api.sock"   # Sprite tasks API (keep-alive); no-op off-Sprite
 KEEPALIVE = "know-curating"
 
@@ -120,13 +121,32 @@ async def _curate(reason: str) -> dict:
     except Exception:  # noqa: BLE001
         pass
     try:
-        return await asyncio.to_thread(run_pass, KB_REPO)
+        result = await asyncio.to_thread(run_pass, KB_REPO)
     finally:
         CURATE.update(writes=0, last_run=time.time(), scheduled=False)
         try:
             await _sprite_api("DELETE", f"/v1/tasks/{KEEPALIVE}")
         except Exception:  # noqa: BLE001
             pass
+    # Self-retrigger: a pass is budget/turn-bounded, so a backlog bigger than one pass
+    # can drain (e.g. a bulk ingest) leaves raw/ non-empty. Re-fire soon so it drains in
+    # minutes rather than one chunk per hourly /wake. Guarded on real progress
+    # (moved_to_superseded>0) so a fact that can't be represented can't spin a tight loop.
+    if (isinstance(result, dict) and result.get("status") == "committed"
+            and result.get("raw_remaining", 0) > 0
+            and result.get("moved_to_superseded", 0) > 0
+            and not CURATE["scheduled"]):
+        CURATE["scheduled"] = True
+        try:
+            asyncio.get_running_loop().create_task(_drain_curate())
+        except RuntimeError:
+            CURATE["scheduled"] = False  # no loop (e.g. a sync test) — skip
+    return result
+
+
+async def _drain_curate():
+    await asyncio.sleep(CURATE_DRAIN_SECS)
+    await _curate("drain-backlog")
 
 
 async def _debounced_curate():

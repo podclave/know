@@ -1,6 +1,6 @@
 """Secretary safety-invariant tests. The claude agent is replaced by a fake that
 performs scripted file actions, so these verify the DETERMINISTIC guarantees —
-never-rm, human-wins, blast-radius, optimistic concurrency, attribution — with no
+never-rm, human-wins, optimistic concurrency, attribution — with no
 model in the loop. Quality (does it organize well) is checked live, separately."""
 import subprocess
 
@@ -115,21 +115,22 @@ def test_human_edited_curated_file_survives_pass(repo):
     assert res["status"] == "committed"
 
 
-# --- blast radius: too many changes bails without committing -----------------
-def test_blast_radius_bail(repo):
-    repo.save("f", "b", attribution="a")
+# --- no blast-radius cap: a large pass COMMITS instead of wedging ------------
+def test_large_pass_commits_no_blast_cap(repo):
+    # There is intentionally no blast cap: a too-large pass must not bail (which would
+    # permanently wedge a big backlog), it commits. A pass is bounded by the agent's
+    # turn/budget, and every commit is revertable.
+    repo.save("seed", "body", attribution="a")
 
     def fake_agent(r, model, prompt, timeout):
-        for i in range(30):
-            (r / "curated" / f"f{i}.md").write_text(f"# f{i}\n")
-        return {"incorporated_raw_ids": [], "summary": "too much"}
+        for i in range(30):  # well past the old cap of 25
+            (r / "curated" / f"f{i}.md").write_text(
+                f"---\ntype: Fact\ntitle: Fact number {i}\n---\nFact body {i}.\n")
+        return {"incorporated_raw_ids": [], "summary": "large pass"}
 
-    before = log_authors(repo.repo)
-    res = secretary.run_pass(repo.repo, model="test", max_blast=25, agent=fake_agent)
-    assert res["status"] == "bailed" and res["reason"] == "blast_radius_exceeded"
-    # nothing committed, working tree clean
-    assert log_authors(repo.repo) == before
-    assert not concepts(repo.repo)
+    res = secretary.run_pass(repo.repo, model="test", agent=fake_agent)
+    assert res["status"] == "committed"        # was "bailed" before the cap removal
+    assert len(concepts(repo.repo)) == 30      # all changes landed, none discarded
 
 
 def _sec_commit(repo, msg="secretary: prior"):

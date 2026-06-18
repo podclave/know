@@ -76,7 +76,12 @@ clobber a human edit, delete a fact, or run away across the repo.
     record is closed (moved to `contradictions/resolved/`, never rm). A record filed in
     the same pass isn't auto-closed (a pass-start snapshot gates this). Recall flags any
     open record on the queried concept; `/wake` + the observables report the open count.
-  - **blast-radius cap** — past N changed files the pass bails with a review note.
+  - **no blast-radius cap (by design)** — a pass commits whatever it produced; it is
+    bounded by the agent's per-pass turn/budget/timeout, not a file-count wall. A hard cap
+    that *bailed* a too-large pass would permanently wedge a big backlog (bulk ingest):
+    reset → re-read the same `raw/` → bail again, forever. Convergence over wedging — a
+    backlog drains over successive passes (a pass that leaves `raw/` non-empty re-fires;
+    see `app._curate` / `_drain_curate`), each one a revertable `secretary:` commit.
   - **optimistic concurrency** — if a human commit lands mid-pass (HEAD moved off the
     start ref R with a non-bot author), abort and defer to the next pass.
   - **single-flight** — an flock so two passes never race.

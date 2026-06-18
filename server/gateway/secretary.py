@@ -14,7 +14,6 @@ What PYTHON guarantees (safety), regardless of what the agent does:
     (the agent is told not to touch them; if it does, Python reverts them); and a human
     edit to a disputed concept CLOSES its open contradiction (the dequeue, §13.4).
   • a fact leaves raw/ only when verifiably represented in its destination.
-  • blast-radius cap — past N changed files the pass bails with a review note.
   • optimistic concurrency — if a human commit lands mid-pass, abort and defer.
   • single-flight — an flock so two passes never race.
   • revertable — every pass is one distinct `secretary:`-tagged commit.
@@ -40,7 +39,6 @@ SECRETARY_MARKER = "curate this team knowledge base"
 BASE_REF = "refs/secretary/base"   # local-only ref marking the last reconciled HEAD
 CONTRA_DIR = "contradictions"      # one structured record per open conflict
 CONTRA_RESOLVED = "contradictions/resolved"  # closed conflicts (never rm)
-DEFAULT_MAX_BLAST = 25
 
 
 class SecretaryBusy(Exception):
@@ -574,18 +572,17 @@ def _run_agent(repo: Path, model: str, prompt: str, timeout: int):
 
 # --- the pass ----------------------------------------------------------------
 def run_pass(repo: Path | None = None, model: str | None = None,
-             max_blast: int = DEFAULT_MAX_BLAST, timeout: int = 300,
-             agent=_run_agent) -> dict:
+             timeout: int = 300, agent=_run_agent) -> dict:
     repo = Path(repo or KB_REPO)
     model = model or model_id()
     try:
         with secretary_lock(repo):
-            return _run_pass_locked(repo, model, max_blast, timeout, agent)
+            return _run_pass_locked(repo, model, timeout, agent)
     except SecretaryBusy:
         return {"status": "skipped", "reason": "already_running"}
 
 
-def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
+def _run_pass_locked(repo, model, timeout, agent) -> dict:
     R = _head(repo)
     if not R:
         return {"status": "noop", "reason": "empty_repo"}
@@ -605,7 +602,7 @@ def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
         return {"status": "error", "reason": manifest["_error"]}
 
     # 1. enforce the write-whitelist (reverts forbidden + protected-file changes)
-    allowed_changes = enforce_whitelist(repo, protected)
+    enforce_whitelist(repo, protected)
     # Resolve raw ids against the CURRENT raw/ (not a pass-start snapshot): a `save`
     # can land via a `capture` commit WHILE the agent runs, and if the agent curated
     # that fresh fact we must still move it out of raw/ — else it stays duplicated in
@@ -628,22 +625,22 @@ def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
               if i in raw_map and i not in incorporated and _represented(repo, raw_map[i], contra_text)]
     to_move = incorporated + queued
 
-    # 2. blast-radius cap (curated changes + raw files about to move)
-    blast = len(allowed_changes) + len(to_move)
-    if blast > max_blast:
-        _reset_worktree(repo)
-        return {"status": "bailed", "reason": "blast_radius_exceeded",
-                "changed": blast, "cap": max_blast,
-                "note": "secretary changes exceeded the blast-radius cap; review manually"}
+    # NOTE: there is intentionally NO blast-radius cap. A pass is already bounded by the
+    # agent's per-pass turn/budget/timeout limits, and every pass is one revertable
+    # `secretary:`-tagged commit (never rm; human edits protected). A hard cap that BAILS
+    # a too-large pass would permanently wedge a large backlog (e.g. a bulk ingest):
+    # the pass would reset, re-read the same raw/, and bail again forever. Convergence
+    # over wedging — a big backlog just drains over successive passes (see the
+    # raw_remaining self-retrigger in app._curate).
 
-    # 3. perform the raw->superseded moves (the only raw mutation; never rm)
+    # 2. perform the raw->superseded moves (the only raw mutation; never rm)
     moved = _move_to_superseded(repo, raw_map, to_move)
 
-    # 4. dequeue: close any PRE-EXISTING open contradiction whose target a human just
+    # 3. dequeue: close any PRE-EXISTING open contradiction whose target a human just
     # edited (§13.4 — human always wins).
     contra_resolved = resolve_contradictions(repo, protected, pre_open)
 
-    # 5. OKF finalize (deterministic): guarantee conformance + regenerate the index.
+    # 4. OKF finalize (deterministic): guarantee conformance + regenerate the index.
     # Python owns these so the bundle is always valid regardless of the agent.
     type_fixed = backfill_types(repo)
     generate_index(repo)
@@ -653,13 +650,13 @@ def _run_pass_locked(repo, model, max_blast, timeout, agent) -> dict:
         _git(repo, "update-ref", BASE_REF, R)  # mark reconciled even on a no-op
         return {"status": "noop", "reason": "no_changes_after_enforcement"}
 
-    # 6. optimistic concurrency — abort if a HUMAN commit landed mid-pass (§7.6)
+    # 5. optimistic concurrency — abort if a HUMAN commit landed mid-pass (§7.6)
     if _head(repo) != R:
         if any(ae not in BOT_EMAILS for _, ae in _commits_since(repo, R)):
             _reset_worktree(repo)
             return {"status": "deferred", "reason": "concurrent_human_edit"}
 
-    # 7. commit as the secretary (one revertable, tagged commit) + observables note
+    # 6. commit as the secretary (one revertable, tagged commit) + observables note
     okf = {"concepts": _concept_count(repo), "links": links_total,
            "broken_links": len(links_broken), "type_backfilled": type_fixed}
     contra = {"resolved": contra_resolved, "open": len(open_contradictions(repo))}
