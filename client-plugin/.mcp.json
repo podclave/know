@@ -2,7 +2,7 @@
   "mcpServers": {
     "know": {
       "type": "http",
-      "url": "${user_config.brain_mcp_url}"
+      "url": "${user_config.mcp_url}"
     }
   }
 }

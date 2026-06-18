@@ -1,14 +1,14 @@
 {
   "name": "know",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Your team's shared brain in Claude Code — recall durable team/project facts, save new ones, and surface & resolve contradictions, with optional passive capture. Bundles the MCP connector + /know:* commands; configure it with your personal connector URL (the URL is the credential).",
   "author": { "name": "know" },
   "license": "MIT",
   "defaultEnabled": false,
   "userConfig": {
-    "brain_mcp_url": {
+    "mcp_url": {
       "type": "string",
-      "title": "Brain connector URL",
+      "title": "know connector URL",
       "description": "Your full know connector URL (ask your know admin), including your name — e.g. https://your-brain-host/mcp/<secret>/<your-name>/ . The URL IS the credential; treat it like a password.",
       "sensitive": true,
       "required": true

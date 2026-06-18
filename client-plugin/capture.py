@@ -10,7 +10,7 @@ local `claude -p`, then POSTs them to the brain's MCP `save` tool.
 Carries podbrain brain.py's hard-won protections (DEVELOPING.md lessons): recursion
 guard, detached + debounced run that survives /exit, single-flight flock, per-session
 offset, prompt-hijack delimiting, feedback-loop strip, distiller-transcript skip,
-secret scrub. Config: CLAUDE_PLUGIN_OPTION_BRAIN_MCP_URL (plugin) or BRAIN_MCP_URL.
+secret scrub. Config: CLAUDE_PLUGIN_OPTION_MCP_URL (plugin) or KNOW_MCP_URL.
 
 The connector URL already carries the secret AND the teammate name, so the brain
 stamps attribution itself — no identity config here. The URL IS the credential.
@@ -65,8 +65,8 @@ def scrub(s):
 
 
 def brain_url():
-    return (os.environ.get("CLAUDE_PLUGIN_OPTION_BRAIN_MCP_URL")
-            or os.environ.get("BRAIN_MCP_URL") or "").strip()
+    return (os.environ.get("CLAUDE_PLUGIN_OPTION_MCP_URL")
+            or os.environ.get("KNOW_MCP_URL") or "").strip()
 
 
 def mcp_save(url, title, body, timeout=25):
@@ -156,7 +156,7 @@ def do_distill(sid, transcript):
     saved = already_saved(new)
     exclude = ("\n===ALREADY SAVED THIS SESSION===\n" + "\n".join(saved)) if saved else ""
     prompt = INSTRUCTION + exclude + "\n===TRANSCRIPT===\n" + slice_text
-    model = os.environ.get("BRAIN_DISTILL_MODEL", "claude-haiku-4-5-20251001")
+    model = os.environ.get("KNOW_DISTILL_MODEL", "claude-haiku-4-5-20251001")
     try:
         p = subprocess.run(
             ["claude", "-p", "Follow your instructions exactly. Output only the JSON array.",
@@ -224,7 +224,7 @@ def main():
             detach("_bgnow", sid, tr)
     elif cmd == "_bgstop":
         sid, tr, ts = sys.argv[2], sys.argv[3], sys.argv[4]
-        time.sleep(int(os.environ.get("BRAIN_DEBOUNCE_SECS", "90")))
+        time.sleep(int(os.environ.get("KNOW_DEBOUNCE_SECS", "90")))
         try:
             cur = open(os.path.join(STATE, "ping-" + sid)).read().strip()
         except Exception:

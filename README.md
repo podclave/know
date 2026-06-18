@@ -119,7 +119,7 @@ which enables the brain in *every* folder you open:
 ```
 cd /path/to/your/project
 claude plugin marketplace add podclave/know --scope local
-claude plugin install know@know --scope local --config brain_mcp_url="<your-connector-url>"
+claude plugin install know@know --scope local --config mcp_url="<your-connector-url>"
 claude plugin enable know@know --scope local
 ```
 
@@ -177,7 +177,7 @@ liveness. A spun-down box can't cron itself, so this pinger is required.
 The `know` plugin also ships an optional Stop/SessionEnd hook that distills durable facts
 from each Claude Code session and saves them — a CLI-only nicety the design does **not**
 rely on (model-initiated `save` already works without it; web surfaces have no hook). It
-reuses the same `brain_mcp_url` you set at install, so there's nothing extra to configure.
+reuses the same `mcp_url` you set at install, so there's nothing extra to configure.
 
 ## Editing the brain directly (power users)
 

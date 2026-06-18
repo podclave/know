@@ -323,7 +323,7 @@ cat <<EOF
   enables the brain in EVERY folder you open:
       cd /path/to/your/project
       claude plugin marketplace add podclave/know --scope local
-      claude plugin install know@know --scope local --config brain_mcp_url="$BASE_URL/<your-name>/"
+      claude plugin install know@know --scope local --config mcp_url="$BASE_URL/<your-name>/"
       claude plugin enable know@know --scope local
     --scope local = this folder only, just you (.claude/settings.local.json, gitignored);
     your URL goes to secure storage, never a settings file. Wrong (user) scope already?
