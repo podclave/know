@@ -1,5 +1,6 @@
-"""Scrub pattern tests — canonical patterns in client-plugin/scrub.py, re-exported by gateway."""
+"""Scrub pattern tests — gateway is canonical; plugin mirrors (drift guard)."""
 import importlib.util
+import shutil
 import sys
 from pathlib import Path
 
@@ -17,12 +18,55 @@ def _load(path: Path, name: str):
     return mod
 
 
-plugin_scrub = _load(PLUGIN / "scrub.py", "know_plugin_scrub")
 gateway_scrub = _load(GW / "scrub.py", "know_gateway_scrub")
+plugin_scrub = _load(PLUGIN / "scrub.py", "know_plugin_scrub")
 
 
-def test_gateway_reexports_same_pattern_count():
+def test_scrub_imports_from_deploy_shaped_layout(tmp_path):
+    """Mimics ~/know-gateway after install-know.sh — only scrub.py, no client-plugin/."""
+    deploy_dir = tmp_path / "know-gateway"
+    deploy_dir.mkdir()
+    shutil.copy(GW / "scrub.py", deploy_dir / "scrub.py")
+    mod = _load(deploy_dir / "scrub.py", "know_deploy_scrub")
+    out = mod.scrub("token sk-ant-api03-abcdefghijklmnopqrstuvwxyz")
+    assert "[REDACTED]" in out
+    assert "sk-ant" not in out
+
+
+def test_store_imports_scrub_on_deploy_layout(tmp_path):
+    """store.py:25 imports scrub at boot — must work with only gateway/*.py deployed."""
+    deploy = tmp_path / "know-gateway"
+    deploy.mkdir()
+    for py in GW.glob("*.py"):
+        shutil.copy(py, deploy / py.name)
+    saved_path = sys.path[:]
+    sys.path.insert(0, str(deploy))
+    for name in list(sys.modules):
+        if name in ("scrub", "store", "config"):
+            del sys.modules[name]
+    try:
+        mod = _load(deploy / "store.py", "know_deploy_store")
+        assert mod.scrub("sk-ant-api03-abcdefghijklmnopqrstuvwxyz").startswith("[REDACTED]")
+    finally:
+        sys.path[:] = saved_path
+
+
+def test_plugin_scrub_matches_gateway():
     assert len(gateway_scrub.SCRUB) == len(plugin_scrub.SCRUB)
+    for inp in (
+        "sk-ant-api03-abcdefghijklmnopqrstuvwxyz",
+        "ghp_abcdefghijklmnopqrstuvwxyz1234567890",
+        "deadbeef" * 8,
+    ):
+        assert gateway_scrub.scrub(inp) == plugin_scrub.scrub(inp)
+
+
+def test_plugin_scrub_vendored_fallback_without_gateway(tmp_path):
+    """Marketplace install ships only client-plugin/ — must not depend on server/."""
+    shutil.copy(PLUGIN / "scrub.py", tmp_path / "scrub.py")
+    mod = _load(tmp_path / "scrub.py", "know_plugin_only_scrub")
+    out = mod.scrub("sk-ant-api03-abcdefghijklmnopqrstuvwxyz")
+    assert out == "[REDACTED]"
 
 
 @pytest.mark.parametrize("inp,needle", [
@@ -36,7 +80,6 @@ def test_gateway_reexports_same_pattern_count():
 ])
 def test_scrub_redacts_common_secret_shapes(inp, needle):
     assert needle in gateway_scrub.scrub(inp)
-    assert gateway_scrub.scrub(inp) == plugin_scrub.scrub(inp)
 
 
 def test_scrub_leaves_benign_text_alone():
