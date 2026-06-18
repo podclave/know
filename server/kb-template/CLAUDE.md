@@ -58,6 +58,8 @@ The team standardized on PostgreSQL 16 for all services, decided in the Q2 revie
   API gateway is Kong, owned by the platform team, on port 8000" over "We use Kong."
 - **`type` is required** (OKF's one hard rule); `title`/`description`/`tags`/`timestamp`
   are recommended. `description` is a one-line summary used in previews and the index.
+  `source` is optional provenance — where a fact came from (a doc, an ADR, a decision) —
+  worth setting when you ingest external material.
 - **Scope it.** A brain is per *concern*, not per repo — name the area in the title/body
   so "what's for what" stays clear (e.g. "Frontend (web-app): built with Next.js 14").
 - **No secrets.** Tokens/keys/passwords never belong in a fact; scrubbed on write as a
@@ -75,6 +77,36 @@ graph. Follow these rules (they keep the graph honest and the noise low):
 - **Only link concepts that actually exist.** Never invent a link target.
 - **One link per concept mention per section** — do not over-link. No links in headings,
   code blocks, or frontmatter; never link a document to itself.
+
+## Working in the repo directly (power user)
+
+Clone the repo and curate it in a Claude Code session instead of going through `save` —
+the right move when you're folding in external material (PRDs, ADRs, research, notes on
+the same machine). **Your session is the smart one here.** The on-box secretary is a cheap
+model running janitorial passes; when you work directly, the heavy lifting — reading the
+sources, deciding what's durable, structuring and connecting it — is yours. Do it well;
+don't write sloppy facts and count on the box to fix them.
+
+Folding a pile of docs into the bundle:
+
+- **Read it all, then extract.** Pull out durable, atomic facts — one per
+  `curated/<slug>.md`, in the format above. Skip the ephemeral. Split a doc into several
+  facts; merge several docs into one fact where they say the same thing.
+- **Dedupe against what's here first.** Read `curated/` before you write — fold new
+  knowledge into an existing concept rather than adding a near-duplicate.
+- **Write straight to `curated/`** (you're curating; `raw/` is the always-accept capture
+  path for the `save` tool). Set `type`, a one-line `description`, and `source`.
+- **Cross-link as you go** (rules above). The box won't add links *into* your files on the
+  pass right after you push — they're yours, protected — so the graph is only as connected
+  as you make it.
+- **Keep the source docs out of the repo.** Gitignore or delete your scratch folder; only
+  the extracted facts belong in the bundle.
+- **Commit as yourself — never as `secretary:`.** Human authorship is exactly what makes
+  your work authoritative; the box never clobbers a human-authored fact.
+
+`curated/index.md`, `type` backfill, and link validation are regenerated **on the box** on
+the next pass after you push (via `/wake`) — there's no curator in your clone. Leave the
+index alone, or regenerate it for a correct local view; the box is authoritative.
 
 ## How the secretary curates (each pass)
 
