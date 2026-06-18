@@ -40,8 +40,7 @@ account-global and needs manual settings — prefer Claude Code (see Connect bel
   webhook). MCP auth is optional and every connector surface accepts a no-auth URL —
   no bearer header (the web UIs have no field for one), no OAuth subsystem to age out.
   The `<name>` segment is self-asserted attribution stamped on saves.
-- **The brain authenticates to Anthropic with a static API key**, scoped to the service
-  only — never your interactive `claude` login.
+- **The brain authenticates to Anthropic with a static API key**, scoped to the service only.
 - **Storage:** `raw/` (append-only capture) → `curated/` (the polished read path the
   secretary owns) → `_superseded/` (retired; nothing is ever `rm`'d). Methodology lives
   in the repo's own [`CLAUDE.md`](server/kb-template/CLAUDE.md).
