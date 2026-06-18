@@ -15,46 +15,30 @@ from pathlib import Path
 # SDK + setting_sources=None no user hooks load, but kept cheap + explicit).
 GUARD_ENV = "KNOW_AGENT"
 
-# The KB data repo (git repo of one-fact-per-file markdown = the truth).
-KB_REPO = Path(os.environ.get("BRAIN_KB_REPO", str(Path.home() / "brain-kb"))).expanduser()
+# The KB data repo (git repo of one-fact-per-file markdown = the truth). Fixed location —
+# one brain per host (the installer puts it here); not configurable.
+KB_REPO = (Path.home() / "know-kb")
 
 # Teammate-facing secret that lives in the MCP URL path (the credential).
-SECRET = os.environ.get("BRAIN_SECRET", "").strip()
+SECRET = os.environ.get("KNOW_SECRET", "").strip()
 
-# Human-readable brain/team name (onboarding cards, commit context).
-BRAIN_NAME = os.environ.get("BRAIN_NAME", "know").strip() or "know"
+# Human-readable brain name (set by the installer's --name; shown in healthz/wake/viewer).
+NAME = os.environ.get("KNOW_NAME", "know").strip() or "know"
 
 # Reserved bot identities — (name, email). The email is what the classifier keys on.
 CAPTURE_IDENTITY = ("know-capture", "capture@know.local")
 SECRETARY_IDENTITY = ("know-secretary", "secretary@know.local")
 BOT_EMAILS = {CAPTURE_IDENTITY[1], SECRETARY_IDENTITY[1]}
 
-# Mirror remote name (private GitHub mirror; push is best-effort).
-MIRROR_REMOTE = os.environ.get("BRAIN_MIRROR_REMOTE", "mirror").strip() or "mirror"
+# Git remote name for the optional backup/restore remote (best-effort push/pull). Constant.
+MIRROR_REMOTE = "mirror"
 
-# The Anthropic model the recall/secretary agents run on. Resolved to a concrete
-# dated id at install and recorded on the model line of KB_REPO/CLAUDE.md (spec §5.2);
-# env override wins. No evergreen alias — dated ids retire on Anthropic's clock.
+# The Anthropic model the recall/secretary agents run on. The installer pins a concrete
+# dated id into the service env (KNOW_MODEL); absent, fall back to the build-time default.
+# No evergreen alias — dated ids retire on Anthropic's clock; re-run install to re-pin.
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
-def model_id(kb_repo: Path | None = None) -> str:
-    """Resolve the pinned model id: env override > the recorded line in the KB
-    repo's CLAUDE.md (`model: <id>`) > the build-time default."""
-    env = os.environ.get("BRAIN_MODEL", "").strip()
-    if env:
-        return env
-    repo = kb_repo or KB_REPO
-    claude_md = repo / "CLAUDE.md"
-    try:
-        for line in claude_md.read_text().splitlines():
-            s = line.strip()
-            # Match a "model: <id>" line (markdown bullet or bare), case-insensitive key.
-            low = s.lower().lstrip("-* ").strip()
-            if low.startswith("model:"):
-                val = s.split(":", 1)[1].strip().strip("`")
-                if val:
-                    return val
-    except OSError:
-        pass
-    return _DEFAULT_MODEL
+def model_id() -> str:
+    """Resolve the pinned model id: KNOW_MODEL env (installer-set) > the build-time default."""
+    return os.environ.get("KNOW_MODEL", "").strip() or _DEFAULT_MODEL

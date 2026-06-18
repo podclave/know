@@ -577,7 +577,7 @@ def run_pass(repo: Path | None = None, model: str | None = None,
              max_blast: int = DEFAULT_MAX_BLAST, timeout: int = 300,
              agent=_run_agent) -> dict:
     repo = Path(repo or KB_REPO)
-    model = model or model_id(repo)
+    model = model or model_id()
     try:
         with secretary_lock(repo):
             return _run_pass_locked(repo, model, max_blast, timeout, agent)

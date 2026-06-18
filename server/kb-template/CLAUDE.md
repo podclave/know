@@ -24,18 +24,6 @@ rendered as an interactive graph by the OKF static visualizer — with zero lock
 > A conversational `resolve` commits under your name, so it rides the same "human always
 > wins" protection a hand-edit does.
 
-## Config — the one pinned line
-
-<!-- Resolved at install; re-pin = edit these two lines and re-run install-brain.sh -->
-- model: claude-haiku-4-5-20251001
-- claude-version: (recorded at install)
-
-These pin the recall/secretary runtime. There is **no evergreen model alias** — dated
-ids retire on Anthropic's clock, so this is a concrete id the install resolved and the
-boot self-check verifies still resolves. Re-pin to a costlier model only as a deliberate
-human call when recall is judged to be missing facts known to be present (never on a
-metric).
-
 ## Layout
 
 - `raw/` — append-only capture, one fact per file. Written by the `save` tool and

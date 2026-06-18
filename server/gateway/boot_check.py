@@ -9,7 +9,7 @@ other (spec §10.11):
                    loud when retired -> the known re-pin chore).
 
 Also resolves the cheapest-tier (haiku) dated id at install time. Importable so
-/wake reuses auth_probe; runnable as a CLI by install-brain.sh.
+/wake reuses auth_probe; runnable as a CLI by install-know.sh.
 
 Usage:
   python boot_check.py auth                         -> exit 0/1, prints status
@@ -118,7 +118,7 @@ def full_check(floor: str, model: str, recorded: str | None = None) -> int:
     # model-resolves needs auth; only meaningful if auth passed
     m_ok = a_ok and model_resolves(model)
     print(f"[3/3] model resolves .. {'OK' if m_ok else 'FAIL'} — {model}"
-          + ("" if m_ok else " (retired/unreachable — re-pin the model line in CLAUDE.md)"))
+          + ("" if m_ok else " (retired/unreachable — re-pin via KNOW_MODEL and re-run install)"))
     ok &= m_ok
     return 0 if ok else 1
 

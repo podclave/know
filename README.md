@@ -59,14 +59,15 @@ On a **public** Sprite (or any host — see below) with an `ANTHROPIC_API_KEY` a
 (default: the `sk-` line of `~/ANTHROPIC_API_KEY`):
 
 ```bash
-bash server/install-brain.sh [brain-name] [--no-remote]
+bash server/install-know.sh [--name <label>] [--remote <clone-url> | --no-remote]
 ```
 
-You must either point the brain at a git remote it can push to — `export
-BRAIN_REMOTE_URL=<clone url>` (any host; a repo you created and can push to) — or pass
-`--no-remote` to run local-only on purpose. That remote is your backup **and** your
-restore source (see **Backup & restore** below); the installer verifies it before doing
-the slow work, and fails fast with help if it's missing or unreachable.
+You must either point the brain at a git remote it can push to — `--remote <clone-url>`
+(any host; a repo you created and can push to) — or pass `--no-remote` to run local-only
+on purpose. That remote is your backup **and** your restore source (see **Backup &
+restore** below); the installer verifies it before doing the slow work, and fails fast
+with help if it's missing or unreachable. A re-run needs neither flag (it reuses the
+wired remote) and preserves the existing `--name`.
 
 Idempotent — safe to re-run; standing up brain #N is the same command on a fresh host.
 No Node or system `claude` needed: the agent runtime is the **Claude Agent SDK's bundled
@@ -83,8 +84,9 @@ the same script stands a brain up on a plain VM — e.g. a DigitalOcean droplet 
 Sprite. (The `sprite-env` service wrapper is the one Sprite-specific piece; on another host
 run the gateway under any supervisor.)
 
-Useful env: `BRAIN_REMOTE_URL=<clone url>` (or `--no-remote`),
-`BRAIN_ALERT_WEBHOOK=<slack-webhook>` (auth-failure alerts), `CLAUDE_FLOOR=2.1.92`.
+Flags: `--name <label>` (display name; default `know`), `--remote <clone-url>` / `--no-remote`.
+Env: `KNOW_MODEL=<id>` (pin a specific model on (re)install), `KNOW_ALERT_WEBHOOK=<slack-webhook>`
+(auth-failure alerts), `ANTHROPIC_API_KEY` (or its `_FILE`).
 
 ## Backup & restore (the git remote)
 
@@ -93,8 +95,8 @@ becomes both a **backup** (every save/curation pushes to it) and a **restore sou
 
 - **Empty remote** → the installer seeds it from a fresh KB.
 - **Existing remote (has history)** → the installer **clones it back**. So if a box dies,
-  re-running `install-brain.sh <name>` with the *same* `BRAIN_REMOTE_URL` stands up a
-  replacement with the whole KB — facts, history, contradictions — restored. That's the point.
+  re-running `install-know.sh --remote <same url>` stands up a replacement with the whole
+  KB — facts, history, contradictions — restored. That's the point.
 - **`--no-remote`** → explicit local-only: no backup, no restore, no off-box editing.
 
 You bring the repo and the git auth; the installer **verifies** it (reachable, and a real

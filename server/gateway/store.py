@@ -8,7 +8,7 @@ Layout:
   curated/<slug>.md     secretary-promoted, polished
   _superseded/...       retired facts (moved, never deleted)
   INDEX                 secretary-maintained map of the curated set
-  CLAUDE.md             the methodology + the one pinned model/version line
+  CLAUDE.md             the curation methodology (read by the secretary agent)
 
 Methods are sync (git is blocking); the FastAPI handler runs them off the event
 loop via asyncio.to_thread.

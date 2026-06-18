@@ -100,9 +100,9 @@ app.include_router(build_router(config.SECRET, Handlers(KB_REPO)))
 # pass after a short quiet window, at most once per MIN_SECS, holding a Sprite
 # keep-alive so the box can't suspend mid-pass. Lifted from podbrain app.py note_writes.
 CURATE = {"writes": 0, "last_run": 0.0, "scheduled": False}
-CURATE_MIN_SECS = int(os.environ.get("BRAIN_CURATE_MIN_SECS", "300"))
-CURATE_DEBOUNCE = int(os.environ.get("BRAIN_CURATE_DEBOUNCE_SECS", "20"))
-SPRITE_SOCK = os.environ.get("SPRITE_SOCK", "/.sprite/api.sock")
+CURATE_MIN_SECS = 300       # min seconds between event-driven (on-box) curation passes
+CURATE_DEBOUNCE = 20        # quiet window after a save before a curation pass fires
+SPRITE_SOCK = "/.sprite/api.sock"   # Sprite tasks API (keep-alive); no-op off-Sprite
 KEEPALIVE = "know-curating"
 
 
@@ -150,7 +150,7 @@ def note_write(n: int = 1):
 # --- endpoints ----------------------------------------------------------------
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok", "service": "know", "brain": config.BRAIN_NAME}
+    return {"status": "ok", "service": "know", "name": config.NAME}
 
 
 # --- viewer: the OKF static graph visualizer over the curated bundle ---------
@@ -158,7 +158,7 @@ async def healthz():
 # wrong/missing -> plain 404). Renders the curated/ OKF bundle as a self-contained
 # interactive graph; generated on demand so it's always current.
 def _viewer_html() -> str:
-    return generate_html(KB_REPO / "curated", bundle_name=config.BRAIN_NAME)
+    return generate_html(KB_REPO / "curated", bundle_name=config.NAME)
 
 
 async def _viewer(path_secret: str):
@@ -175,12 +175,12 @@ app.add_api_route("/viewer/{path_secret}", _viewer, methods=["GET"])
 async def _alert(text: str):
     """Push an out-of-band alert (Slack webhook) on auth failure — a spun-down box
     can't cron itself, so /wake is the only place this fires. Best-effort."""
-    hook = os.environ.get("BRAIN_ALERT_WEBHOOK", "").strip()
+    hook = os.environ.get("KNOW_ALERT_WEBHOOK", "").strip()
     if not hook:
         return
     try:
         async with httpx.AsyncClient(timeout=10) as c:
-            await c.post(hook, json={"text": f"[know:{config.BRAIN_NAME}] {text}"})
+            await c.post(hook, json={"text": f"[know:{config.NAME}] {text}"})
     except Exception:  # noqa: BLE001
         pass
 
@@ -198,7 +198,7 @@ async def wake():
     """The external-heartbeat route (spec §10.8): auth probe (+alert), pull the
     off-box mirror, reconcile (curation pass) if it brought human edits, and report
     curator liveness. Plain HTTP — the external pinger just poke this."""
-    out = {"brain": config.BRAIN_NAME, "woke": time.time()}
+    out = {"name": config.NAME, "woke": time.time()}
 
     # 1. auth probe — distinct, loud, alerts out-of-band on failure
     ok, msg = await asyncio.to_thread(auth_probe)

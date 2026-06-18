@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# install-brain.sh — stand up one know brain on a Sprite. Idempotent; brain #N is
-# a re-run on a fresh Sprite (Gate A). Every step is green/red and re-asserts on re-run.
+# install-know.sh — stand up one `know` brain on a Sprite (or any host). Idempotent;
+# brain #N is a re-run on a fresh host. Every step is green/red and re-asserts on re-run.
 #
-#   bash server/install-brain.sh [brain-name] [--no-remote]
+#   bash server/install-know.sh [--name <label>] [--remote <clone-url> | --no-remote]
 #
-# Needs (runtime, not files): an ANTHROPIC_API_KEY (default: ~/ANTHROPIC_API_KEY, the
-# sk- line), a Sprite with url_access=public, and EITHER a git remote you can push to
-# (export BRAIN_REMOTE_URL=<clone url>) OR --no-remote to run local-only on purpose.
-# The key is set ONLY on the service env (spec §9.8) — never your interactive shell.
+# Needs: an ANTHROPIC_API_KEY (default: the sk- line of ~/ANTHROPIC_API_KEY), a Sprite
+# with url_access=public, and EITHER a git remote you can push to (--remote <url>) OR
+# --no-remote to run local-only. A re-run needs neither flag — it reuses the wired
+# remote and preserves the existing --name. The key is set ONLY on the service env.
 set -euo pipefail
 log(){ printf '\033[1;36m[know]\033[0m %s\n' "$*"; }
 ok(){  printf '\033[1;32m[know] OK:\033[0m %s\n' "$*"; }
@@ -15,34 +15,39 @@ die(){ printf '\033[1;31m[know] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- args + config -----------------------------------------------------------
-NO_REMOTE=""; POSARGS=()
-for a in "$@"; do
-  case "$a" in
+NO_REMOTE=""; REMOTE_URL=""; NAME_ARG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-remote) NO_REMOTE=1 ;;
-    --*) die "unknown flag: $a (usage: install-brain.sh [brain-name] [--no-remote])" ;;
-    *) POSARGS+=("$a") ;;
+    --remote) shift; REMOTE_URL="${1:-}"; [ -n "$REMOTE_URL" ] || die "--remote needs a <clone-url>" ;;
+    --remote=*) REMOTE_URL="${1#--remote=}" ;;
+    --name) shift; NAME_ARG="${1:-}"; [ -n "$NAME_ARG" ] || die "--name needs a value" ;;
+    --name=*) NAME_ARG="${1#--name=}" ;;
+    --*) die "unknown flag: $1 (use --name <label>, --remote <url>, or --no-remote)" ;;
+    *) die "unexpected argument: $1 (use --name <label>, --remote <url>, or --no-remote)" ;;
   esac
+  shift
 done
-[ -n "${BRAIN_NO_REMOTE:-}" ] && NO_REMOTE=1
-[ -n "${BRAIN_NO_MIRROR:-}" ] && NO_REMOTE=1   # back-compat alias (deprecated)
 
-CLAUDE_FLOOR="${CLAUDE_FLOOR:-2.1.92}"
-BRAIN_NAME="${POSARGS[0]:-$(sprite-env info 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("sprite_name","know"))' 2>/dev/null || echo know)}"
+CLAUDE_FLOOR="2.1.92"
 GW_DIR="$HOME/know-gateway"
-KB_REPO="${BRAIN_KB_REPO:-$HOME/know-kb}"
+KB_REPO="${KNOW_KB_REPO:-$HOME/know-kb}"   # KNOW_KB_REPO = internal override for the test harness only
 STATE_DIR="$HOME/.know"
 KEY_FILE="${ANTHROPIC_API_KEY_FILE:-$HOME/ANTHROPIC_API_KEY}"
-REMOTE_URL="${BRAIN_REMOTE_URL:-}"
 PORT=8080
 SERVICE=know
 # Trust-on-first-use for SSH remotes (a fresh box has no known_hosts → push would hang).
 SSH_CMD="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20}"
 
+# read an env var off the existing service (so a re-run preserves --name / model)
+svc_env(){ sprite-env services get "$SERVICE" 2>/dev/null \
+  | python3 -c "import sys,json; print(json.load(sys.stdin).get('env',{}).get('$1',''))" 2>/dev/null || true; }
+
 # --- KB repo + remote: resolve, then adopt-or-seed (the "git is the truth") ---
-# The brain ALWAYS has a local git repo (KB_REPO = the truth). A remote is optional
-# but, when present, is BOTH a backup destination AND a restore source: point a fresh
-# box at the same BRAIN_REMOTE_URL and it clones the whole KB back. We never create or
-# auto-name a remote — you bring a repo you can push to (any host), and we verify it.
+# The brain ALWAYS has a local git repo (KB_REPO = the truth). A remote is optional but,
+# when present, is BOTH a backup destination AND a restore source: point a fresh box at
+# the same --remote and it clones the whole KB back. We never create or name a repo — you
+# bring one you can push to (any host), and we verify it.
 resolve_remote() {            # sets REMOTE_MODE (local|remote), REMOTE_HAS_COMMITS, REMOTE_URL
   REMOTE_MODE=local; REMOTE_HAS_COMMITS=""
   if [ -n "$NO_REMOTE" ]; then
@@ -57,19 +62,18 @@ resolve_remote() {            # sets REMOTE_MODE (local|remote), REMOTE_HAS_COMM
   if [ -z "$REMOTE_URL" ]; then
     die "No KB remote configured.
   A know brain should back its git repo to a remote you control — for durability,
-  restore-on-a-new-box, and the off-box editing path. Either provide one:
-      export BRAIN_REMOTE_URL=<clone url>     # a repo you created and can push to,
-                                              # e.g. git@github.com:you/know-kb.git
-                                              #  or  https://githost/you/know-kb.git
+  restore-on-a-new-box, and the off-box editing path. Either pass one:
+      --remote <clone-url>     # a repo you created and can push to, e.g.
+                               #   git@github.com:you/know-kb.git  or  https://host/you/know-kb.git
   (ensure this box's git auth — an SSH key in the agent, or a credential helper — can
-  push to it), OR re-run with --no-remote to run local-only on purpose."
+  push to it), OR pass --no-remote to run local-only on purpose."
   fi
   local out
   if ! out="$(GIT_SSH_COMMAND="$SSH_CMD" git ls-remote "$REMOTE_URL" 2>&1)"; then
     die "can't reach or authenticate the remote: $REMOTE_URL
   $out
   Make sure the repo exists and this box's git credentials (SSH key / helper) can
-  access it — or re-run with --no-remote."
+  access it — or pass --no-remote."
   fi
   REMOTE_MODE=remote
   if [ -n "$out" ]; then
@@ -98,16 +102,27 @@ _seed_kb() {                  # fresh KB skeleton (OKF bundle) + first commit
     commit -q -m "capture: init knowledge base (OKF bundle in curated/)"
 }
 
+_wire_mirror() {              # ensure remote 'mirror' points at REMOTE_URL
+  if git -C "$KB_REPO" remote | grep -qx mirror; then
+    git -C "$KB_REPO" remote set-url mirror "$REMOTE_URL"
+  else
+    git -C "$KB_REPO" remote add mirror "$REMOTE_URL"
+  fi
+}
+
 setup_kb() {
   if [ -d "$KB_REPO/.git" ]; then
     log "KB repo exists at $KB_REPO — reusing"
     if [ "$REMOTE_MODE" = remote ]; then
-      if git -C "$KB_REPO" remote | grep -qx mirror; then
-        git -C "$KB_REPO" remote set-url mirror "$REMOTE_URL"
+      _wire_mirror
+      if [ -n "$REMOTE_HAS_COMMITS" ]; then
+        GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" pull --ff-only mirror >/dev/null 2>&1 || true
       else
-        git -C "$KB_REPO" remote add mirror "$REMOTE_URL"
+        # adding a remote to an existing local-only brain → seed the empty remote
+        GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" push -u mirror HEAD >/dev/null 2>&1 \
+          || die "couldn't seed the remote $REMOTE_URL from the existing KB (write access?). Or --no-remote."
+        ok "seeded remote $REMOTE_URL from the existing KB"
       fi
-      GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" pull --ff-only mirror >/dev/null 2>&1 || true
     fi
   elif [ "$REMOTE_MODE" = remote ] && [ -n "$REMOTE_HAS_COMMITS" ]; then
     log "restoring KB from remote → $KB_REPO"
@@ -124,12 +139,11 @@ setup_kb() {
     if [ "$REMOTE_MODE" = remote ]; then
       git -C "$KB_REPO" remote add mirror "$REMOTE_URL"
       GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" push -u mirror HEAD >/dev/null 2>&1 \
-        || die "seeded the local KB but PUSH to $REMOTE_URL failed — no write access, or
-  the repo already has unrelated history (use an EMPTY repo you can push to). Or --no-remote."
+        || die "seeded the local KB but PUSH to $REMOTE_URL failed — no write access, or the
+  repo already has unrelated history (use an EMPTY repo you can push to). Or --no-remote."
       ok "seeded remote $REMOTE_URL"
     fi
   fi
-  # confirm the remote is actually writable (so backups will push); local stays the truth
   if [ "$REMOTE_MODE" = remote ]; then
     if _remote_writable; then ok "remote is reachable + writable: $REMOTE_URL"
     else log "WARN: $REMOTE_URL is reachable but NOT writable from this box — new facts
@@ -138,12 +152,12 @@ setup_kb() {
 }
 
 # --- TEST SEAM: exercise just the KB/remote logic (no service/venv/key needed) ----
-# KB_SETUP_TEST=1 BRAIN_KB_REPO=… [BRAIN_REMOTE_URL=… | --no-remote] bash install-brain.sh
-if [ -n "${KB_SETUP_TEST:-}" ]; then
+# KNOW_SETUP_TEST=1 KNOW_KB_REPO=… bash install-know.sh [--remote <url> | --no-remote]
+if [ -n "${KNOW_SETUP_TEST:-}" ]; then
   command -v git >/dev/null 2>&1 || die "git required"
   resolve_remote
   setup_kb
-  ok "KB_SETUP_TEST done (mode=$REMOTE_MODE)"
+  ok "KNOW_SETUP_TEST done (mode=$REMOTE_MODE)"
   exit 0
 fi
 
@@ -154,6 +168,9 @@ for t in python3 openssl curl git sprite-env; do
 done
 python3 -c 'import venv' 2>/dev/null || die "python3 venv module not available"
 mkdir -p "$STATE_DIR"
+
+# resolve the brain's display name: --name > existing service's KNOW_NAME (re-run) > "know"
+NAME="${NAME_ARG:-$(svc_env KNOW_NAME)}"; NAME="${NAME:-know}"
 
 # resolve the Anthropic key (file's sk- line, or the env var) — kept in THIS process
 # only; passed to the service via --env, never written to a profile/bashrc.
@@ -194,12 +211,14 @@ python3 -c "import sys; f='$CLAUDE_FLOOR'.split('.'); v='$CLAUDE_VER'.split('.')
   || die "bundled CLI $CLAUDE_VER is below the floor $CLAUDE_FLOOR (bump claude-agent-sdk)"
 ok "agent runtime: SDK bundled CLI $CLAUDE_VER (floor $CLAUDE_FLOOR)"
 
-# --- 4. resolve + pin the cheapest-tier model id (§5.2) ----------------------
-MODEL="${BRAIN_MODEL:-$("$PYBIN" "$GW_DIR/boot_check.py" resolve-model)}"
+# --- 3. resolve the model id (KNOW_MODEL > existing service's pin > resolved default) --
+MODEL="${KNOW_MODEL:-}"
+[ -z "$MODEL" ] && MODEL="$(svc_env KNOW_MODEL)"
+[ -z "$MODEL" ] && MODEL="$("$PYBIN" "$GW_DIR/boot_check.py" resolve-model)"
 [ -n "$MODEL" ] || die "could not resolve a model id"
-ok "pinned model: $MODEL"
+ok "model: $MODEL"
 
-# --- 5. mint the secret (persisted; re-run reuses it) ------------------------
+# --- 4. mint the secret (persisted; re-run reuses it) ------------------------
 SECRET_FILE="$STATE_DIR/secret"
 if [ ! -f "$SECRET_FILE" ]; then
   openssl rand -hex 24 > "$SECRET_FILE"; chmod 600 "$SECRET_FILE"
@@ -207,30 +226,15 @@ if [ ! -f "$SECRET_FILE" ]; then
 fi
 SECRET="$(cat "$SECRET_FILE")"
 
-# --- 6. KB data repo: adopt-or-seed (init fresh / restore from remote / reuse) --
+# --- 5. KB data repo: adopt-or-seed (init fresh / restore from remote / reuse) --
 setup_kb
-# record the resolved model + claude version onto the ONE config line (§5.2, §10.3)
-"$PYBIN" - "$KB_REPO/CLAUDE.md" "$MODEL" "$CLAUDE_VER" <<'PY'
-import re, sys
-path, model, ver = sys.argv[1], sys.argv[2], sys.argv[3]
-s = open(path).read()
-s = re.sub(r'(?m)^- model:.*$', f'- model: {model}', s, count=1)
-s = re.sub(r'(?m)^- claude-version:.*$', f'- claude-version: {ver}', s, count=1)
-open(path, 'w').write(s)
-PY
-git -C "$KB_REPO" add CLAUDE.md
-if ! git -C "$KB_REPO" diff --cached --quiet; then
-  git -C "$KB_REPO" -c user.name=know-secretary -c user.email=secretary@know.local \
-    commit -q -m "secretary: pin model=$MODEL claude=$CLAUDE_VER"
-  [ "$REMOTE_MODE" = remote ] && GIT_SSH_COMMAND="$SSH_CMD" git -C "$KB_REPO" push mirror HEAD >/dev/null 2>&1 || true
-fi
-ok "KB repo ready ($KB_REPO); model+version recorded in CLAUDE.md"
+ok "KB repo ready ($KB_REPO)"
 
-# --- 7. supervised sprite-env service (key scoped HERE, not the shell) -------
-# pass PATH so the recall/secretary `claude` subprocess (a node app) + git resolve
-# under the supervised service's otherwise-minimal environment.
-ENVS="HOME=$HOME,PATH=$PATH,ANTHROPIC_API_KEY=$API_KEY,BRAIN_SECRET=$SECRET,BRAIN_KB_REPO=$KB_REPO,BRAIN_MODEL=$MODEL,BRAIN_NAME=$BRAIN_NAME"
-[ -n "${BRAIN_ALERT_WEBHOOK:-}" ] && ENVS="$ENVS,BRAIN_ALERT_WEBHOOK=$BRAIN_ALERT_WEBHOOK"
+# --- 6. supervised sprite-env service (key + config scoped HERE, not the shell) --
+# PATH lets the recall/secretary agent subprocess + git resolve under the service's
+# otherwise-minimal environment. The gateway reads KNOW_* from this env.
+ENVS="HOME=$HOME,PATH=$PATH,ANTHROPIC_API_KEY=$API_KEY,KNOW_SECRET=$SECRET,KNOW_NAME=$NAME,KNOW_MODEL=$MODEL"
+[ -n "${KNOW_ALERT_WEBHOOK:-}" ] && ENVS="$ENVS,KNOW_ALERT_WEBHOOK=$KNOW_ALERT_WEBHOOK"
 create_service(){
   sprite-env services create "$SERVICE" --cmd "$PYBIN" \
     --args "-m,uvicorn,app:app,--host,0.0.0.0,--port,$PORT" \
@@ -245,7 +249,7 @@ else
   create_service
 fi
 
-# --- 8. wait for health ------------------------------------------------------
+# --- 7. wait for health ------------------------------------------------------
 log "waiting for the gateway to come up..."
 up=0
 for _ in $(seq 1 40); do
@@ -256,12 +260,12 @@ done
 [ "$up" = "1" ] || die "gateway did not become healthy on :$PORT (check: sprite-env services get $SERVICE)"
 ok "gateway healthy on :$PORT"
 
-# --- 9. ordered boot self-check (refuse green on any failure, §10.11) --------
+# --- 8. ordered boot self-check (refuse green on any failure, §10.11) --------
 log "running the ordered boot self-check..."
 "$PYBIN" "$GW_DIR/boot_check.py" check "$CLAUDE_FLOOR" "$MODEL" "$CLAUDE_VER" \
   || die "boot self-check FAILED — see the leg above; the brain is NOT green"
 
-# --- 10. secret-path reachability asserts (§9.4–9.6) -------------------------
+# --- 9. secret-path reachability asserts (§9.4–9.6) -------------------------
 MCP_PATH="/mcp/$SECRET/install-smoke/"
 init_body='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}'
 code_ok="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT$MCP_PATH" -d "$init_body")"
@@ -275,7 +279,7 @@ PUB_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SPRITE_URL/he
 [ "$PUB_CODE" = "200" ] && ok "public URL reachable: $SPRITE_URL" \
   || log "WARN: public URL $SPRITE_URL/healthz returned '$PUB_CODE' — connectors dial this; verify url_access + DNS"
 
-# --- 11. CLI save/recall smoke (the tools FIRE, not just connect, §9.7) ------
+# --- 10. CLI save/recall smoke (the tools FIRE, not just connect, §9.7) ------
 log "CLI smoke: save + recall a canary through the live MCP tools..."
 SMOKE="/mcp/$SECRET/install-smoke/"
 save_body='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"save","arguments":{"title":"Install canary","body":"know install smoke test canary fact."}}}'
@@ -294,21 +298,21 @@ if [ -n "$CANARY_ID" ]; then
 fi
 ok "CLI save+recall smoke passed (tools fire); canary cleaned up"
 
-# --- 12. onboarding card -----------------------------------------------------
+# --- 11. onboarding card -----------------------------------------------------
 BASE_URL="$SPRITE_URL/mcp/$SECRET"
 if [ "$REMOTE_MODE" = remote ]; then
   BACKUP_LINE="Backup + restore: this brain mirrors its KB to
       $REMOTE_URL
-  To rebuild on a new/replacement box: run install-brain.sh with the SAME
-  BRAIN_REMOTE_URL — it clones the entire KB back (facts, history, contradictions)."
+  Rebuild on a new/replacement box: run install-know.sh --remote <same url> — it
+  clones the entire KB back (facts, history, contradictions)."
 else
   BACKUP_LINE="Backup + restore: LOCAL-ONLY (--no-remote) — no off-box backup or restore.
-  Re-run with BRAIN_REMOTE_URL=<a repo you can push to> to enable durability + restore."
+  Re-run with --remote <a repo you can push to> to enable durability + restore."
 fi
 cat <<EOF
 
 =========================================================================
-  know brain "$BRAIN_NAME" is UP and GREEN.
+  know brain "$NAME" is UP and GREEN.
   -------------------------------------------------------------------
   Your personal connector URL (the URL IS the credential — treat like a password):
 

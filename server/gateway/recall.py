@@ -59,7 +59,7 @@ async def recall(query: str, repo: Path | None = None, model: str | None = None,
         return ("(The team knowledge base is empty — nothing has been saved yet. "
                 "This is an empty brain, not a failed lookup. If you just learned "
                 "something durable, consider calling `save`.)")
-    model = model or model_id(repo)
+    model = model or model_id()
     res = await collect(RECALL_PROMPT.format(query=query), cwd=repo, model=model,
                         allowed_tools=["Read", "Grep", "Glob"], write=False,
                         max_turns=20, budget=RECALL_BUDGET_USD, timeout=timeout)
