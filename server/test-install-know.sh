@@ -9,7 +9,11 @@ T="$(mktemp -d)"; REMOTE="$T/remote.git"
 pass=0; fail=0
 ok(){ echo "  PASS: $1"; pass=$((pass+1)); }
 no(){ echo "  FAIL: $1"; fail=$((fail+1)); }
-git init --bare -q "$REMOTE"
+# -b main: the installer seeds the KB on 'main' (install-know.sh), so the bare
+# remote's default branch must be 'main' too — otherwise `git clone` (restore)
+# checks out the remote's HEAD branch, which has no commits, on any box whose
+# init.defaultBranch is not 'main' (e.g. CI runners defaulting to 'master').
+git init --bare -q -b main "$REMOTE"
 
 echo "== syntax =="
 if bash -n "$INSTALL"; then echo "  syntax ok"; else echo "  SYNTAX ERROR"; exit 1; fi
@@ -53,7 +57,7 @@ KNOW_SETUP_TEST=1 KNOW_KB_REPO="$T/kbC" bash "$INSTALL" --remote "$REMOTE" >"$T/
 grep -qi "restoring KB from remote" "$T/c.log" && ok "took the restore path (not seed)" || no "did not log restore"
 
 echo "== D: add a remote to an existing local-only brain (seeds it) =="
-git init --bare -q "$T/remote2.git"
+git init --bare -q -b main "$T/remote2.git"
 KNOW_SETUP_TEST=1 KNOW_KB_REPO="$T/kbA" bash "$INSTALL" --remote "$T/remote2.git" >"$T/d.log" 2>&1; rc=$?
 [ $rc -eq 0 ] && ok "exits 0" || { no "exit $rc"; cat "$T/d.log"; }
 [ -n "$(git ls-remote "$T/remote2.git" 2>/dev/null)" ] && ok "seeded the newly-added remote from local" || no "remote2 still empty"
