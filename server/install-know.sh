@@ -442,16 +442,12 @@ cat <<EOF
   HTTP endpoint anymore.)
   -------------------------------------------------------------------
   ORG ADMINS (Podclave): provision EVERY user with zero setup — no plugin, no URL paste.
-  Drop the overlay's static files into a Podclave org bundle (templates live in the know
-  repo at examples/managed/, mirroring their deploy paths):
+  In the know repo, run:  bash examples/managed/output.sh
+  It prints every file to place in a Podclave org bundle, each under a
+  "# BUNDLE LOCATION: <path>" banner — paste each block into the bundle at that path.
 
-  • examples/managed/etc/* — copy into <org-bundle>/etc/ (the connector + the
-    settings drop-in that auto-allows the know tools and arms the commit-nudge hook).
-  • client-plugin/nudge.py — copy it into the bundle at
-    <org-bundle>/etc/claude-code/know/nudge.py (so it lands at /etc/claude-code/know/nudge.py).
-
-  Then set THIS brain's values in <org-bundle>/etc/profile.d/know-identity.sh — the one
-  place env is set (KNOW_USER is filled per-user automatically):
+  Then set THIS brain's values in the bundle's know-identity.sh (the one place env is set;
+  KNOW_USER is filled per-user automatically):
 
       export KNOW_HOST="$KNOW_HOST_VAL"
       export KNOW_SECRET="$SECRET"

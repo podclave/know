@@ -1,6 +1,6 @@
-# /etc/profile.d/know-identity.sh
-# The ONE place the admin sets the know overlay's environment. managed-mcp.json expands
-# these into each user's connector URL: https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER}/
+# know overlay — the ONE place the admin sets the environment (placement: examples/managed/output.sh).
+# managed-mcp.json expands these into each user's connector URL:
+#   https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER:-anonymous}/
 #
 # Admin: fill in your brain's host + shared secret (from the installer's onboarding card).
 # Leave no default on these two — if unset the connector URL is plainly broken (visible),

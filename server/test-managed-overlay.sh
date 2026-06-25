@@ -54,5 +54,22 @@ sys.exit(0 if (expected and mcp_allow == expected) else 1)
 PY
 then ok "permissions.allow matches gateway tools (mcp__know__*)"; else no "permissions.allow drift vs gateway TOOLS"; fi
 
+# 5. output.sh is the single source of placement: it runs and emits every bundle file
+#    under its "BUNDLE LOCATION:" banner, with the file's real content.
+OUT="$MGD/output.sh"
+if [ -f "$OUT" ] && bash -n "$OUT" 2>/dev/null; then ok "output.sh syntax ok"; else no "output.sh missing or bad syntax"; fi
+rendered="$(bash "$OUT" 2>/dev/null || true)"
+for loc in \
+  "/etc/profile.d/know-identity.sh" \
+  "/etc/claude-code/managed-mcp.json" \
+  "/etc/claude-code/managed-settings.d/50-know.json" \
+  "/etc/claude-code/know/nudge.py"; do
+  echo "$rendered" | grep -qF "BUNDLE LOCATION: $loc" && ok "output.sh banners $loc" || no "output.sh missing banner for $loc"
+done
+echo "$rendered" | grep -q 'mcpServers'        && ok "output.sh cats managed-mcp.json"   || no "output.sh missing managed-mcp content"
+echo "$rendered" | grep -q 'mcp__know__recall' && ok "output.sh cats 50-know.json"        || no "output.sh missing settings content"
+echo "$rendered" | grep -q 'KNOW_HOST'         && ok "output.sh cats know-identity.sh"    || no "output.sh missing identity content"
+echo "$rendered" | grep -qF '<know-nudge>'     && ok "output.sh cats nudge.py"            || no "output.sh missing nudge content"
+
 echo ""; echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

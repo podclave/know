@@ -150,25 +150,31 @@ not load-bearing.
   per-user config. Its env tunables still apply (`KNOW_NUDGE`, `KNOW_NUDGE_MIN_TURNS`,
   `KNOW_NUDGE_GAP_TURNS`).
 
-### 4. Nudge deployment
+### 4. Nudge deployment + placement source of truth
 
 The nudge script is deployed to `/etc/claude-code/know/nudge.py`, copied verbatim from
-the repo's single source of truth `client-plugin/nudge.py`. No second copy is committed to
-the tree; the docs and the installer card both reference copying that file. This keeps the
-managed and plugin nudge identical by construction.
+the repo's single source of truth `client-plugin/nudge.py`. No second copy is committed.
+
+**Placement lives in exactly one place: `examples/managed/output.sh`.** Placing files in a
+Podclave org bundle is a manual process (the admin can't `cp` into a bundle from the
+install host, and there's no reliable cross-host copy), so the overlay does NOT scatter
+per-file `# BUNDLE LOCATION` comments (and JSON can't carry comments anyway). Instead
+`output.sh` cats every file the admin needs — the three overlay templates **and**
+`client-plugin/nudge.py` — each under a `# BUNDLE LOCATION: <path>` banner. The admin runs
+it and pastes each block into the bundle at the path shown. The README and installer card
+do not duplicate placement; they point at `output.sh`.
 
 ## Deliverables
 
-1. **`examples/managed/` (repo)** — the overlay templates, laid out to **mirror their
-   deploy paths** so an admin can `cp -r examples/managed/etc/* <org-bundle>/etc/`:
+1. **`examples/managed/` (repo)** — the overlay templates + the placement lister:
    - `etc/claude-code/managed-mcp.json` (env-driven URL — no placeholders; copied verbatim)
    - `etc/claude-code/managed-settings.d/50-know.json` (the permissions + hook block above)
    - `etc/profile.d/know-identity.sh` (the one place env is set: `KNOW_HOST`/`KNOW_SECRET`/`KNOW_USER`)
-   - `README.md` — what each file is, where it goes, the one-file-to-edit model, the
-     `managed-settings.d/` merge behavior, the "merge the `know` entry into an existing
-     `managed-mcp.json`" note, and the `nudge.py` step (ships at `client-plugin/nudge.py`;
-     copy into the bundle at `etc/claude-code/know/nudge.py` — intentionally NOT mirrored,
-     so there's no second copy of the script).
+   - `output.sh` (the **single source of placement**: cats each of the above + `client-plugin/nudge.py`
+     under a `# BUNDLE LOCATION: <path>` banner for manual paste into the bundle)
+   - `README.md` — what each file does (no per-file destinations — those come from `output.sh`),
+     the one-file-to-edit model, the `managed-settings.d/` merge behavior, and the
+     "merge the `know` entry into an existing `managed-mcp.json`" note.
 
 2. **Top-level `README.md` section** — "Org-wide zero-setup provisioning (Podclave /
    managed settings)": explains the model (admin drops files into a Podclave org bundle;
@@ -179,18 +185,18 @@ managed and plugin nudge identical by construction.
 
 3. **Installer onboarding-card block (`server/install-know.sh`)** — a new **"Org admin
    overlay"** section in the printed card. It does NOT repeat the template file contents
-   (those live in `examples/managed/`); it points the admin at the templates + the bundle
-   paths, and prints THIS brain's values to paste into `know-identity.sh`: `KNOW_HOST`
-   (host from `$SPRITE_URL`, scheme stripped) and `KNOW_SECRET` (`$SECRET`). Gated to print
-   always (harmless guidance), appended after the connect/visualizer/heartbeat sections.
+   (those come from `examples/managed/output.sh`); it tells the admin to run `output.sh`
+   and prints THIS brain's values to paste into `know-identity.sh`: `KNOW_HOST` (host from
+   `$SPRITE_URL`, scheme stripped) and `KNOW_SECRET` (`$SECRET`). Gated to print always
+   (harmless guidance), appended after the connect/visualizer/heartbeat sections.
 
 ## Data flow (after)
 
 ```
 Admin (once, into a Podclave org bundle):
-  cp -r examples/managed/etc/* <org-bundle>/etc/        (connector + settings drop-in + bridge)
-  cp client-plugin/nudge.py <org-bundle>/etc/claude-code/know/nudge.py
-  edit <org-bundle>/etc/profile.d/know-identity.sh      (set KNOW_HOST + KNOW_SECRET)
+  bash examples/managed/output.sh   → prints each file under "# BUNDLE LOCATION: <path>";
+                                       paste each block into the bundle at that path
+  set KNOW_HOST + KNOW_SECRET in the bundle's know-identity.sh (values from the install card)
 
 End user (zero action):
   launch `claude`

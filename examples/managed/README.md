@@ -4,15 +4,13 @@ Provision every org user with the `know` connector + commit-nudge at **zero per-
 setup**. As the Podclave org admin, drop these static files into a **Podclave org bundle**.
 Users do nothing — `claude` just has `know` on first launch.
 
-This directory mirrors the deploy paths. Copy the tree into your bundle:
+Placing files in a bundle is a manual process. Run:
 
-    cp -r examples/managed/etc/* <org-bundle>/etc/
+    bash examples/managed/output.sh
 
-Then add the nudge script — it ships in this repo at `client-plugin/nudge.py`; place a
-copy in the bundle at `etc/claude-code/know/nudge.py` (so it lands at
-`/etc/claude-code/know/nudge.py` on each user's box):
-
-    cp client-plugin/nudge.py <org-bundle>/etc/claude-code/know/nudge.py
+It prints every file the admin needs, each under a `# BUNDLE LOCATION: <path>` banner —
+copy each block into the bundle at the path shown. The files below are the source of those
+blocks (and `client-plugin/nudge.py`).
 
 ## What the admin edits
 
@@ -28,7 +26,9 @@ placeholders to hand-edit.
 
 ## Files
 
-- `etc/profile.d/know-identity.sh` → `/etc/profile.d/know-identity.sh`
+(Destinations come from `output.sh`; these descriptions are just what each file does.)
+
+- `etc/profile.d/know-identity.sh`
   The one place env is set. `KNOW_HOST` + `KNOW_SECRET` are admin-filled (no default — if
   unset the connector URL is plainly broken, which beats silently routing somewhere
   wrong). `KNOW_USER` is bridged from the per-user identity **file** `~/.podclave/user-email`
@@ -37,13 +37,13 @@ placeholders to hand-edit.
   user's URL carries anyway, so it is no new exposure, but this overlay assumes **one
   brain per box**; do not use it to mix multiple teams' secrets on one box.
 
-- `etc/claude-code/managed-mcp.json` → `/etc/claude-code/managed-mcp.json`
+- `etc/claude-code/managed-mcp.json`
   The per-user connector: `https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER:-anonymous}/`.
   Copied verbatim. **There is no `managed-mcp.d/` drop-in** — if Podclave already manages
   this file, merge the `know` entry into the existing `mcpServers` object instead of
   overwriting it.
 
-- `etc/claude-code/managed-settings.d/50-know.json` → `/etc/claude-code/managed-settings.d/50-know.json`
+- `etc/claude-code/managed-settings.d/50-know.json`
   A **drop-in** settings file: auto-allows the six `know` tools (so recall/save never
   prompt — the curation gate is the in-conversation approval the model already requires)
   and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order,
