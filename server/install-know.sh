@@ -442,18 +442,14 @@ cat <<EOF
   HTTP endpoint anymore.)
   -------------------------------------------------------------------
   ORG ADMINS (Podclave): provision EVERY user with zero setup — no plugin, no URL paste.
-  In the know repo, run:  bash examples/managed/output.sh
+  In the know repo, run (THIS brain's values are already filled in for you):
+
+      KNOW_HOST='$KNOW_HOST_VAL' KNOW_SECRET='$SECRET' bash examples/managed/output.sh
+
   It prints every file to place in a Podclave org bundle, each under a
   "# BUNDLE LOCATION: <path>" banner — paste each block into the bundle at that path.
-
-  Then set THIS brain's values in the bundle's know-identity.sh (the one place env is set;
-  KNOW_USER is filled per-user automatically):
-
-      export KNOW_HOST="$KNOW_HOST_VAL"
-      export KNOW_SECRET="$SECRET"
-
-  Recall/save then work with no prompt. The secret is the same shared team secret each
-  user's URL carries anyway — treat the bundle accordingly (one brain per box).
+  (Recall/save then work with no prompt. The secret is the same shared team secret each
+  user's URL carries anyway — treat the bundle accordingly; one brain per box.)
   -------------------------------------------------------------------
   KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================

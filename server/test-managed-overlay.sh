@@ -71,5 +71,11 @@ echo "$rendered" | grep -q 'mcp__know__recall' && ok "output.sh cats 50-know.jso
 echo "$rendered" | grep -q 'KNOW_HOST'         && ok "output.sh cats know-identity.sh"    || no "output.sh missing identity content"
 echo "$rendered" | grep -qF '<know-nudge>'     && ok "output.sh cats nudge.py"            || no "output.sh missing nudge content"
 
+# 6. output.sh fills in KNOW_HOST/KNOW_SECRET when passed (no hand-edit needed)
+filled="$(KNOW_HOST=h.example.test KNOW_SECRET=deadbeefcafe bash "$OUT" 2>/dev/null || true)"
+echo "$filled" | grep -q 'KNOW_HOST="h.example.test"'   && ok "output.sh fills KNOW_HOST"   || no "output.sh did not fill KNOW_HOST"
+echo "$filled" | grep -q 'KNOW_SECRET="deadbeefcafe"'   && ok "output.sh fills KNOW_SECRET" || no "output.sh did not fill KNOW_SECRET"
+echo "$filled" | grep -qF '<brain-host>'                && no "output.sh left a <brain-host> placeholder when values were passed" || ok "no placeholder left when values passed"
+
 echo ""; echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -164,6 +164,13 @@ per-file `# BUNDLE LOCATION` comments (and JSON can't carry comments anyway). In
 it and pastes each block into the bundle at the path shown. The README and installer card
 do not duplicate placement; they point at `output.sh`.
 
+`output.sh` also **fills in the values**: pass `KNOW_HOST` and `KNOW_SECRET` (env vars; the
+installer card prints a ready-to-paste `KNOW_HOST=… KNOW_SECRET=… bash examples/managed/output.sh`
+command with this brain's values) and the emitted `know-identity.sh` block has them
+substituted for the `<brain-host>`/`<shared-secret>` placeholders — so there's no separate
+hand-edit step. Without them it emits the placeholder template. (`KNOW_USER` is always the
+per-user runtime expression; the JSON files are emitted verbatim.)
+
 ## Deliverables
 
 1. **`examples/managed/` (repo)** — the overlay templates + the placement lister:
