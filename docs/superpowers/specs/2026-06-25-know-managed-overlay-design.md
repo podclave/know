@@ -160,9 +160,12 @@ Podclave org bundle is a manual process (the admin can't `cp` into a bundle from
 install host, and there's no reliable cross-host copy), so the overlay does NOT scatter
 per-file `# BUNDLE LOCATION` comments (and JSON can't carry comments anyway). Instead
 `output.sh` cats every file the admin needs — the three overlay templates **and**
-`client-plugin/nudge.py` — each under a `# BUNDLE LOCATION: <path>` banner. The admin runs
-it and pastes each block into the bundle at the path shown. The README and installer card
-do not duplicate placement; they point at `output.sh`.
+`client-plugin/nudge.py` — each under a banner naming its destination **and the owner +
+mode to set in the bundle** (`# BUNDLE LOCATION: <path>` then `# owner: root   mode: 0644`,
+then a blank line). All four are owner `root`, mode `0644` (world-readable so every user's
+login shell + `claude` can read them — the Podclave bundle UI sets ownership/perms per
+file). The admin runs it and pastes each block into the bundle at the path shown. The
+README and installer card do not duplicate placement; they point at `output.sh`.
 
 `output.sh` also **fills in the values automatically**. Run on the brain box (where the
 installer ran), it self-discovers this brain's host + secret exactly where the installer
