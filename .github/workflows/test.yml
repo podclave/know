@@ -28,6 +28,11 @@ jobs:
           cd server/gateway
           .venv/bin/python -m pytest -q
 
+      - name: pytest (client nudge hook)
+        run: |
+          cd client-plugin
+          ../server/gateway/.venv/bin/python -m pytest test_nudge.py -q
+
   install-script:
     runs-on: ubuntu-latest
     steps:
