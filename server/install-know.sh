@@ -439,6 +439,36 @@ cat <<EOF
   off-box via the mirror remote; with --no-remote it's a no-op. There is no /wake
   HTTP endpoint anymore.)
   -------------------------------------------------------------------
+  ORG ADMINS (Podclave): provision EVERY user with zero setup — no plugin, no URL paste.
+  As the org admin, drop these static files on the managed Claude Code image:
+
+  1) /etc/profile.d/know-identity.sh   (turns the per-user identity file into an env var)
+       export KNOW_USER="\$(cat "\$HOME/.podclave/user-email" 2>/dev/null || echo anonymous)"
+
+  2) /etc/claude-code/managed-mcp.json   (per-user connector; merge into it if it exists)
+       {
+         "mcpServers": {
+           "know": {
+             "type": "http",
+             "url": "$SPRITE_URL/mcp/$SECRET/\${KNOW_USER:-anonymous}/"
+           }
+         }
+       }
+
+  3) /etc/claude-code/managed-settings.d/50-know.json   (auto-allow know tools + nudge hook)
+       {
+         "permissions": { "allow": [
+           "mcp__know__recall","mcp__know__list","mcp__know__contradictions",
+           "mcp__know__save","mcp__know__supersede","mcp__know__resolve" ] },
+         "hooks": { "UserPromptSubmit": [ { "hooks": [
+           { "type": "command", "command": "python3 /etc/claude-code/know/nudge.py" } ] } ] }
+       }
+
+  4) Deploy the nudge script:
+       install -D -m 0644 client-plugin/nudge.py /etc/claude-code/know/nudge.py
+
+  Templates + details: examples/managed/ in the know repo. (Recall/save then work with no
+  prompt; the secret in the URL is the same shared team secret — treat the file accordingly.)
   KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================
 EOF
