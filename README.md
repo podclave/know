@@ -157,6 +157,31 @@ The same URL works as a custom connector, but claude.ai connectors are **account
 for a same-named local folder than the connector. There's no per-project scoping and no
 plugin. Use Claude Code.
 
+## Org-wide zero-setup provisioning (Podclave / managed settings)
+
+Running an org? Instead of each teammate installing the plugin or pasting a URL, an admin
+can provision **every** user at once with Claude Code **managed settings** — users do
+nothing and `know` is just there on first launch.
+
+The per-user identity lives in the file `~/.podclave/user-email`. Because managed settings
+expand environment variables (not files), a tiny `/etc/profile.d` bridge turns it into
+`$KNOW_USER`, which the connector URL templates per user:
+
+1. **`/etc/profile.d/know-identity.sh`** — `export KNOW_USER="$(cat "$HOME/.podclave/user-email" 2>/dev/null || echo anonymous)"`
+2. **`/etc/claude-code/managed-mcp.json`** — the connector, `https://<brain-host>/mcp/<secret>/${KNOW_USER:-anonymous}/` (one shared file; no `managed-mcp.d/` exists — merge the `know` entry in if the file is already managed).
+3. **`/etc/claude-code/managed-settings.d/50-know.json`** — a drop-in that auto-allows the six `know` tools (recall/save never prompt; the curation gate is the in-conversation approval) and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order and `permissions.allow` concatenates, so it coexists with other managed settings.
+4. Copy the nudge script: `install -D -m 0644 client-plugin/nudge.py /etc/claude-code/know/nudge.py`.
+
+Ready-to-use templates (mirroring the deploy paths) live in [`examples/managed/`](examples/managed/),
+and the installer's onboarding card prints all of the above **already filled in** with your
+brain's host + secret. This is an alternative to the per-user plugin / bare-connector paths
+above, not a replacement. The `/know:*` slash commands are not provisioned this way (they
+need the plugin); the nudge + natural language already drive recall/save/commit.
+
+Two things to verify on a test box: that the `claude` session inherits the `profile.d`
+env (else the URL falls back to `…/anonymous/` — set `KNOW_USER` wherever Podclave sources
+session env), and the managed-file paths against your installed Claude Code version.
+
 ## Browse the brain (OKF visualizer)
 
 Open `https://<brain-host>/viewer/<secret>/` in a browser for an interactive

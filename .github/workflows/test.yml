@@ -40,3 +40,6 @@ jobs:
 
       - name: install-know.sh regression (local bare remote, no network)
         run: bash server/test-install-know.sh
+
+      - name: managed-overlay templates validity
+        run: bash server/test-managed-overlay.sh
