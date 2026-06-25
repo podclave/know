@@ -469,6 +469,7 @@ cat <<EOF
 
   Templates + details: examples/managed/ in the know repo. (Recall/save then work with no
   prompt; the secret in the URL is the same shared team secret — treat the file accordingly.)
+  -------------------------------------------------------------------
   KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================
 EOF
