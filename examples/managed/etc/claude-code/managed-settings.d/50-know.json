@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__know__recall",
+      "mcp__know__list",
+      "mcp__know__contradictions",
+      "mcp__know__save",
+      "mcp__know__supersede",
+      "mcp__know__resolve"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "python3 /etc/claude-code/know/nudge.py" } ] }
+    ]
+  }
+}
