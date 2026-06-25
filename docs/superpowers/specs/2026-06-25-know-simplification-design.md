@@ -172,6 +172,44 @@ eyes open. `know` neither encourages nor blocks it — it simply uses whatever w
 
 ---
 
+## Component 6 — Pin the KB repo's commit identity locally (server)
+
+The operator's Sprite carries their synced global `~/.gitconfig` (their GitHub
+name/email). Today every commit path passes a per-invocation `-c user.name/email`
+(store.py `_git`, install seed, secretary, resolver), so the operator is *not*
+currently authoring KB commits. But that relies on every path remembering `-c`; any
+path that forgets falls through to the synced global. There is no floor.
+
+### Add: a local-config floor
+At install, set the KB repo's **local** git config to the `know` bot identity:
+
+```
+git -C ~/know-kb config user.name  "know-capture"
+git -C ~/know-kb config user.email "capture@know.local"
+```
+
+This is `CAPTURE_IDENTITY` (config.py:29) — already a `BOT_EMAILS` member, so a stray
+no-`-c` machine commit is correctly classed as bot (not human) by the secretary's
+classifier. Local repo config overrides the synced global `~/.gitconfig` for every
+commit in the repo, so the operator can never author a KB commit even if a code path
+omits the explicit identity.
+
+Critically, `.git/config` is **local-only**: never committed, never pushed to the
+mirror, never cloned. The bot identity stays on-box; the operator's synced global never
+rides off-box.
+
+### Unchanged
+- The two reserved identities (`know-capture`, `know-secretary` @ `know.local`) and the
+  per-invocation `-c` that distinguishes capture / secretary / resolver commits — they
+  layer on top of the floor.
+- The classifier keying on `BOT_EMAILS`. No new config knob; identities stay the fixed
+  `@know.local` constants.
+
+### Restore note
+The local floor must be (re)applied whenever the KB repo is created or cloned back —
+i.e. the installer sets it on a fresh seed **and** on a restore-from-remote clone,
+since a clone does not inherit the source repo's local `.git/config`.
+
 ## Data Flow (after)
 
 ```
@@ -201,6 +239,10 @@ Off-box edit pushed to the mirror remote
 - **Install regression:** `test-install-know.sh` updated for no-key install and the
   warn-don't-die smoke check; assert no `ANTHROPIC_API_KEY` requirement and no `/wake`
   onboarding step.
+- **Commit identity floor:** test that after install (fresh seed and restore-clone)
+  the KB repo's local `user.email` is the bot identity, and that a commit made with no
+  explicit `-c` is authored as the bot — not whatever a (simulated) global gitconfig
+  says.
 - **Removed code:** delete `test_*` coverage tied to `capture.py` and the REST
   auth/model-resolution helpers.
 
