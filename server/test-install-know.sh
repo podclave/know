@@ -36,6 +36,18 @@ KNOW_SETUP_TEST=1 KNOW_KB_REPO="$T/kbA" bash "$INSTALL" --no-remote >"$T/a.log" 
 git -C "$T/kbA" remote | grep -qx mirror && no "should have NO mirror remote" || ok "no mirror remote"
 [ -f "$T/kbA/curated/index.md" ] && ok "seeded curated/index.md" || no "no index.md"
 
+echo "== identity floor: KB repo local git config is the bot, not a global identity =="
+[ "$(git -C "$T/kbA" config user.name)"  = "know-capture" ]       && ok "local user.name pinned"  || no "user.name not pinned"
+[ "$(git -C "$T/kbA" config user.email)" = "capture@know.local" ] && ok "local user.email pinned" || no "user.email not pinned"
+# A commit with NO -c identity must still be authored by the bot: repo-local config
+# beats the (absent) global one. Empty fake HOME = no global gitconfig to fall back to,
+# so this proves the floor protects the real risk (a path that forgets -c).
+mkdir -p "$T/fakehome"
+echo scratch > "$T/kbA/raw/floor-probe.md"; git -C "$T/kbA" add -A
+HOME="$T/fakehome" GIT_CONFIG_NOSYSTEM=1 git -C "$T/kbA" commit -q -m "probe"
+AUTH="$(git -C "$T/kbA" log -1 --format='%an <%ae>')"
+echo "$AUTH" | grep -q "capture@know.local" && ok "no-identity commit authored by the bot ($AUTH)" || no "leaked identity: $AUTH"
+
 echo "== B: fresh (empty) remote -> seed + push (--remote) =="
 KNOW_SETUP_TEST=1 KNOW_KB_REPO="$T/kbB" bash "$INSTALL" --remote "$REMOTE" >"$T/b.log" 2>&1; rc=$?
 [ $rc -eq 0 ] && ok "exits 0" || { no "exit $rc"; cat "$T/b.log"; }
@@ -55,6 +67,7 @@ KNOW_SETUP_TEST=1 KNOW_KB_REPO="$T/kbC" bash "$INSTALL" --remote "$REMOTE" >"$T/
 [ -f "$T/kbC/curated/restore-canary.md" ] && ok "RESTORED the canary fact" || no "canary missing after restore"
 [ "$(git -C "$T/kbC" rev-list --count HEAD 2>/dev/null)" = "$B_COUNT" ] && ok "history matches B ($B_COUNT commits)" || no "history mismatch"
 grep -qi "restoring KB from remote" "$T/c.log" && ok "took the restore path (not seed)" || no "did not log restore"
+[ "$(git -C "$T/kbC" config user.email)" = "capture@know.local" ] && ok "restore pinned the identity floor" || no "restore left identity unpinned"
 
 echo "== D: add a remote to an existing local-only brain (seeds it) =="
 git init --bare -q -b main "$T/remote2.git"

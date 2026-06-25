@@ -56,15 +56,14 @@ TOOLS = [
        {"query": _STR("What to look up — keywords, a question, file names, or concepts")},
        required=["query"]),
     _t("save",
-       "Save a durable team/project fact to the shared knowledge base so "
-       "teammates and future sessions can recall it. Call this WITHOUT being "
-       "asked whenever the conversation establishes something durable: an "
-       "infra/architecture fact (services, endpoints, owners, regions, versions, "
-       "ports), a decision reached, a convention, or a gotcha/known-issue — "
-       "INCLUDING facts surfaced while troubleshooting, synthesized over several "
-       "turns, or learned from a pasted or uploaded document. Do NOT save "
-       "secrets/tokens/keys, generic advice, or transient chatter. One fact per "
-       "call: a short descriptive title plus the fact in the body.",
+       "Persist a durable team/project fact the USER has approved saving, so "
+       "teammates and future sessions can recall it. Do NOT call this on your own "
+       "initiative: first PROPOSE the fact(s) to the user — a short title plus the "
+       "fact — and wait for an explicit go-ahead, then save only what they approved. "
+       "One fact per call. Good facts are durable and specific: an infra/architecture "
+       "detail (services, endpoints, owners, versions, ports), a decision, a "
+       "convention, or a gotcha/known-issue. Never save secrets/tokens/keys, generic "
+       "advice, or transient chatter.",
        {"title": _STR("Short descriptive title for the fact"),
         "body": _STR("The fact itself — specific and self-contained"),
         "type": _STR("Kind of fact: Fact, Decision, Convention, Gotcha, Runbook, "

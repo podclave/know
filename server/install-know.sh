@@ -4,10 +4,10 @@
 #
 #   bash server/install-know.sh [--name <label>] [--remote <clone-url> | --no-remote]
 #
-# Needs: an ANTHROPIC_API_KEY (default: the sk- line of ~/ANTHROPIC_API_KEY), a Sprite
-# with url_access=public, and EITHER a git remote you can push to (--remote <url>) OR
-# --no-remote to run local-only. A re-run needs neither flag — it reuses the wired
-# remote and preserves the existing --name. The key is set ONLY on the service env.
+# Needs: a working `claude` on this box (any Claude auth the SDK can use — subscription
+# token, API key, or logged-in ~/.claude), a Sprite with url_access=public, and EITHER a
+# git remote you can push to (--remote <url>) OR --no-remote to run local-only. A re-run
+# needs neither flag — it reuses the wired remote and preserves the existing --name.
 set -euo pipefail
 log(){ printf '\033[1;36m[know]\033[0m %s\n' "$*"; }
 ok(){  printf '\033[1;32m[know] OK:\033[0m %s\n' "$*"; }
@@ -34,7 +34,6 @@ CLAUDE_FLOOR="2.1.92"
 GW_DIR="$HOME/know-gateway"
 KB_REPO="${KNOW_KB_REPO:-$HOME/know-kb}"   # KNOW_KB_REPO = internal override for the test harness only
 STATE_DIR="$HOME/.know"
-KEY_FILE="${ANTHROPIC_API_KEY_FILE:-$HOME/ANTHROPIC_API_KEY}"
 PORT=8080
 SERVICE=know
 # Trust-on-first-use for SSH remotes (a fresh box has no known_hosts → push would hang).
@@ -107,12 +106,18 @@ _remote_writable() {          # prove push access without touching real refs
 _seed_kb() {                  # fresh KB skeleton (OKF bundle) + first commit
   mkdir -p "$KB_REPO"/{raw,curated,_superseded,contradictions}
   git -C "$KB_REPO" init -q -b main 2>/dev/null || git -C "$KB_REPO" init -q
+  _pin_identity
   for d in raw _superseded contradictions; do touch "$KB_REPO/$d/.gitkeep"; done
   cp "$HERE/kb-template/CLAUDE.md" "$KB_REPO/CLAUDE.md"
   printf -- '---\nokf_version: "0.1"\n---\n\n# Knowledge base index\n\n_(empty — facts appear here as the secretary curates them)_\n' > "$KB_REPO/curated/index.md"
   git -C "$KB_REPO" add -A
   git -C "$KB_REPO" -c user.name=know-capture -c user.email=capture@know.local \
     commit -q -m "capture: init knowledge base (OKF bundle in curated/)"
+}
+
+_pin_identity() {             # repo-local commit identity = the bot, NEVER the synced global
+  git -C "$KB_REPO" config user.name  "know-capture"
+  git -C "$KB_REPO" config user.email "capture@know.local"
 }
 
 _wire_mirror() {              # ensure remote 'mirror' points at REMOTE_URL
@@ -172,6 +177,7 @@ _guided_deploy_key() {
 setup_kb() {
   if [ -d "$KB_REPO/.git" ]; then
     log "KB repo exists at $KB_REPO — reusing"
+    _pin_identity
     if [ "$REMOTE_MODE" = remote ]; then
       _wire_mirror
       if [ -n "$REMOTE_HAS_COMMITS" ]; then
@@ -191,6 +197,7 @@ setup_kb() {
     git -C "$KB_REPO" remote | grep -qx origin && git -C "$KB_REPO" remote rename origin mirror || true
     git -C "$KB_REPO" remote | grep -qx mirror || git -C "$KB_REPO" remote add mirror "$REMOTE_URL"
     for d in raw curated _superseded contradictions; do mkdir -p "$KB_REPO/$d"; done
+    _pin_identity
     ok "restored KB from remote ($(git -C "$KB_REPO" rev-list --count HEAD 2>/dev/null || echo '?') commits)"
   else
     log "initializing a fresh KB repo at $KB_REPO"
@@ -236,15 +243,6 @@ mkdir -p "$STATE_DIR"
 # resolve the brain's display name: --name > existing service's KNOW_NAME (re-run) > "know"
 NAME="${NAME_ARG:-$(svc_env KNOW_NAME)}"; NAME="${NAME:-know}"
 
-# resolve the Anthropic key (file's sk- line, or the env var) — kept in THIS process
-# only; passed to the service via --env, never written to a profile/bashrc.
-API_KEY="${ANTHROPIC_API_KEY:-}"
-if [ -z "$API_KEY" ] && [ -f "$KEY_FILE" ]; then
-  API_KEY="$(grep -oE 'sk-ant[A-Za-z0-9_-]+' "$KEY_FILE" | head -1 || true)"
-fi
-[ -n "$API_KEY" ] || die "no ANTHROPIC_API_KEY (set it, or put the key in $KEY_FILE)"
-export ANTHROPIC_API_KEY="$API_KEY"   # for this script's boot-check calls only
-
 # --- 1. assert the Sprite is public (§9.6) -----------------------------------
 URL_ACCESS="$(sprite-env info 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("url_access",""))' 2>/dev/null || true)"
 SPRITE_URL="$(sprite-env info 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("sprite_url",""))' 2>/dev/null || true)"
@@ -275,12 +273,11 @@ python3 -c "import sys; f='$CLAUDE_FLOOR'.split('.'); v='$CLAUDE_VER'.split('.')
   || die "bundled CLI $CLAUDE_VER is below the floor $CLAUDE_FLOOR (bump claude-agent-sdk)"
 ok "agent runtime: SDK bundled CLI $CLAUDE_VER (floor $CLAUDE_FLOOR)"
 
-# --- 3. resolve the model id (KNOW_MODEL > existing service's pin > resolved default) --
+# --- 3. resolve the model id (KNOW_MODEL > existing service's pin > default haiku) --
 MODEL="${KNOW_MODEL:-}"
 [ -z "$MODEL" ] && MODEL="$(svc_env KNOW_MODEL)"
-[ -z "$MODEL" ] && MODEL="$("$PYBIN" "$GW_DIR/boot_check.py" resolve-model)"
-[ -n "$MODEL" ] || die "could not resolve a model id"
-ok "model: $MODEL"
+[ -z "$MODEL" ] && MODEL="claude-haiku-4-5-20251001"
+ok "model: $MODEL (override with KNOW_MODEL=<id>)"
 
 # --- 4. mint the secret (persisted; re-run reuses it) ------------------------
 SECRET_FILE="$STATE_DIR/secret"
@@ -294,10 +291,15 @@ SECRET="$(cat "$SECRET_FILE")"
 setup_kb
 ok "KB repo ready ($KB_REPO)"
 
-# --- 6. supervised sprite-env service (key + config scoped HERE, not the shell) --
-# PATH lets the recall/secretary agent subprocess + git resolve under the service's
-# otherwise-minimal environment. The gateway reads KNOW_* from this env.
-ENVS="HOME=$HOME,PATH=$PATH,ANTHROPIC_API_KEY=$API_KEY,KNOW_SECRET=$SECRET,KNOW_NAME=$NAME,KNOW_MODEL=$MODEL"
+# --- 6. supervised sprite-env service (config scoped HERE, not the shell) ----
+# Auth is inherited via HOME: the service runs as the operator's user with their HOME,
+# so the SDK finds whatever makes interactive `claude` work (subscription token, API key,
+# logged-in ~/.claude). Do NOT add ANTHROPIC_API_KEY here — a forwarded key would
+# override a subscription, exactly what we avoid. If the box auths only via a shell env
+# var, the recall smoke warns clearly and the operator can add it to ENVS themselves.
+# PATH lets the secretary agent subprocess + git resolve under the service's otherwise-
+# minimal environment. The gateway reads KNOW_* from this env.
+ENVS="HOME=$HOME,PATH=$PATH,KNOW_SECRET=$SECRET,KNOW_NAME=$NAME,KNOW_MODEL=$MODEL"
 [ -n "${KNOW_ALERT_WEBHOOK:-}" ] && ENVS="$ENVS,KNOW_ALERT_WEBHOOK=$KNOW_ALERT_WEBHOOK"
 create_service(){
   sprite-env services create "$SERVICE" --cmd "$PYBIN" \
@@ -324,10 +326,10 @@ done
 [ "$up" = "1" ] || die "gateway did not become healthy on :$PORT (check: sprite-env services get $SERVICE)"
 ok "gateway healthy on :$PORT"
 
-# --- 8. ordered boot self-check (refuse green on any failure, §10.11) --------
-log "running the ordered boot self-check..."
-"$PYBIN" "$GW_DIR/boot_check.py" check "$CLAUDE_FLOOR" "$MODEL" "$CLAUDE_VER" \
-  || die "boot self-check FAILED — see the leg above; the brain is NOT green"
+# --- 8. boot self-check: agent RUNTIME only (no auth/model gate — see §smoke below) --
+log "checking the agent runtime (SDK bundled CLI)..."
+"$PYBIN" "$GW_DIR/boot_check.py" check "$CLAUDE_FLOOR" "$CLAUDE_VER" \
+  || die "agent runtime check FAILED — the SDK's bundled CLI is missing or below floor"
 
 # --- 9. secret-path reachability asserts (§9.4–9.6) -------------------------
 MCP_PATH="/mcp/$SECRET/install-smoke/"
@@ -353,7 +355,11 @@ echo "$save_out" | grep -q 'Saved' || die "save smoke did not confirm: $save_out
 CANARY_ID="$(echo "$save_out" | grep -oE 'id [0-9a-f]+' | awk '{print $2}')"
 recall_body='{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"recall","arguments":{"query":"install canary"}}}'
 recall_out="$(curl -s --max-time 150 "http://localhost:$PORT$SMOKE" -d "$recall_body")"
-echo "$recall_out" | grep -qi 'canary' || log "WARN: recall smoke did not surface the canary (cold model wake?) — raw: $(echo "$recall_out" | head -c 200)"
+echo "$recall_out" | grep -qi 'canary' \
+  || log "WARN: recall did not surface the canary — the agent may not be able to run.
+  Make sure \`claude\` works on this box (any Claude auth the SDK can use) and that the
+  model '$MODEL' is available; saves still work, but recall/curation need a working agent.
+  raw: $(echo "$recall_out" | head -c 200)"
 # clean up the canary so the smoke never pollutes the real KB (runs within seconds,
 # beating the curation debounce so the secretary won't promote it).
 if [ -n "$CANARY_ID" ]; then
@@ -364,6 +370,12 @@ ok "CLI save+recall smoke passed (tools fire); canary cleaned up"
 
 # --- 11. onboarding card -----------------------------------------------------
 BASE_URL="$SPRITE_URL/mcp/$SECRET"
+# Build the scheduled wake command WITH the env it needs: wake.py reads KNOW_NAME,
+# KNOW_MODEL, and KNOW_ALERT_WEBHOOK from os.environ, but a scheduler (Podclave Schedule
+# or crontab) runs outside the sprite-env service env and won't inherit those values.
+WAKE_CMD="KNOW_NAME='$NAME' KNOW_MODEL='$MODEL'"
+[ -n "${KNOW_ALERT_WEBHOOK:-}" ] && WAKE_CMD="$WAKE_CMD KNOW_ALERT_WEBHOOK='$KNOW_ALERT_WEBHOOK'"
+WAKE_CMD="$WAKE_CMD $PYBIN $GW_DIR/wake.py"
 if [ "$REMOTE_MODE" = remote ]; then
   BACKUP_LINE="Backup + restore: this brain mirrors its KB to
       $REMOTE_URL
@@ -415,13 +427,17 @@ cat <<EOF
   (same secret-in-path; open in a browser — click a node to read the fact and
   follow its cross-links.)
   -------------------------------------------------------------------
-  Heartbeat: add an external pinger (Podclave Schedule / GitHub Actions cron /
-  uptime monitor), hourly, that POSTs to:
+  Heartbeat (off-box reconcile): a spun-down box can't cron itself, so schedule this
+  command to run hourly — it pulls the mirror remote and reconciles any off-box edits:
 
-      $SPRITE_URL/wake
+      $WAKE_CMD
 
-  (auth probe + curator liveness; with a remote it also pulls + reconciles off-box
-  edits. A spun-down box can't cron itself, so this is required for off-box reconcile.)
+  • Sprite: create a Podclave Schedule (control plane) that runs the command above hourly.
+  • Plain VM: add a crontab line, e.g.  0 * * * * $WAKE_CMD
+  (The command carries the env wake.py needs — alert webhook, brain name, pinned model —
+  because the scheduler runs outside the service env. Only needed if you edit the KB
+  off-box via the mirror remote; with --no-remote it's a no-op. There is no /wake
+  HTTP endpoint anymore.)
   -------------------------------------------------------------------
   KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================

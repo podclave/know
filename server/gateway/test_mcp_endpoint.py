@@ -251,3 +251,13 @@ def test_handler_exception_is_visible_tool_error(harness):
     assert body["isError"] is True
     assert "know call failed" in body["content"][0]["text"]
     assert "brain auth invalid" in body["content"][0]["text"]
+
+
+def test_save_description_is_user_gated(harness):
+    client, _ = harness
+    tools = rpc(client, "tools/list").json()["result"]["tools"]
+    save = next(t for t in tools if t["name"] == "save")
+    desc = save["description"].lower()
+    assert "approved" in desc
+    assert "without being asked" not in desc
+    assert "on your own initiative" in desc

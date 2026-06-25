@@ -1,10 +1,7 @@
 {
   "hooks": {
-    "Stop": [
-      { "hooks": [ { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/capture.py\" hook-stop", "async": true } ] }
-    ],
-    "SessionEnd": [
-      { "hooks": [ { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/capture.py\" hook-sessionend" } ] }
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/nudge.py\"" } ] }
     ]
   }
 }
