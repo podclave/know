@@ -4,17 +4,19 @@ Provision every org user with the `know` connector + commit-nudge at **zero per-
 setup**. As the Podclave org admin, drop these static files into a **Podclave org bundle**.
 Users do nothing — `claude` just has `know` on first launch.
 
-Placing files in a bundle is a manual process. Pass your brain's host + secret (from the
-installer's onboarding card) and run:
+Placing files in a bundle is a manual process. On the brain box (where you ran the
+installer), run:
 
-    KNOW_HOST=your-brain.example.com KNOW_SECRET=<the shared team secret> bash examples/managed/output.sh
+    bash examples/managed/output.sh
 
 It prints every file the admin needs, each under a `# BUNDLE LOCATION: <path>` banner —
-paste each block into the bundle at the path shown. With those two values set, the printed
-`know-identity.sh` already has them filled in; without them it prints the
+paste each block into the bundle at the path shown. It **auto-detects this brain's host +
+secret** (secret from `~/.know/secret`, host from `sprite-env info` — where the installer
+put them) and emits `know-identity.sh` already filled in. Running off-box instead? Override
+with `KNOW_HOST=… KNOW_SECRET=… bash examples/managed/output.sh`; with neither it prints the
 `<brain-host>`/`<shared-secret>` placeholders to edit by hand. `KNOW_USER` is always filled
 per-user automatically from the Podclave identity file, and the JSON files are emitted
-verbatim (they read the env vars — no per-deploy placeholders).
+verbatim (no per-deploy placeholders).
 
 ## Files
 

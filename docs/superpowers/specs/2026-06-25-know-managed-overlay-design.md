@@ -164,12 +164,13 @@ per-file `# BUNDLE LOCATION` comments (and JSON can't carry comments anyway). In
 it and pastes each block into the bundle at the path shown. The README and installer card
 do not duplicate placement; they point at `output.sh`.
 
-`output.sh` also **fills in the values**: pass `KNOW_HOST` and `KNOW_SECRET` (env vars; the
-installer card prints a ready-to-paste `KNOW_HOST=… KNOW_SECRET=… bash examples/managed/output.sh`
-command with this brain's values) and the emitted `know-identity.sh` block has them
-substituted for the `<brain-host>`/`<shared-secret>` placeholders — so there's no separate
-hand-edit step. Without them it emits the placeholder template. (`KNOW_USER` is always the
-per-user runtime expression; the JSON files are emitted verbatim.)
+`output.sh` also **fills in the values automatically**. Run on the brain box (where the
+installer ran), it self-discovers this brain's host + secret exactly where the installer
+stored them — the secret from `~/.know/secret` and the host from `sprite-env info` — and
+substitutes them for the `<brain-host>`/`<shared-secret>` placeholders in the emitted
+`know-identity.sh`. No args, no hand-edit. Env vars `KNOW_HOST`/`KNOW_SECRET` override (for
+running off-box); with neither available it emits the placeholder template. (`KNOW_USER` is
+always the per-user runtime expression; the JSON files are emitted verbatim.)
 
 ## Deliverables
 
@@ -192,18 +193,19 @@ per-user runtime expression; the JSON files are emitted verbatim.)
 
 3. **Installer onboarding-card block (`server/install-know.sh`)** — a new **"Org admin
    overlay"** section in the printed card. It does NOT repeat the template file contents
-   (those come from `examples/managed/output.sh`); it tells the admin to run `output.sh`
-   and prints THIS brain's values to paste into `know-identity.sh`: `KNOW_HOST` (host from
-   `$SPRITE_URL`, scheme stripped) and `KNOW_SECRET` (`$SECRET`). Gated to print always
-   (harmless guidance), appended after the connect/visualizer/heartbeat sections.
+   (those come from `examples/managed/output.sh`) and does NOT need to print host/secret
+   values — it just tells the admin to run `bash examples/managed/output.sh` on this box,
+   which auto-detects both. Gated to print always (harmless guidance), appended after the
+   connect/visualizer/heartbeat sections.
 
 ## Data flow (after)
 
 ```
-Admin (once, into a Podclave org bundle):
-  bash examples/managed/output.sh   → prints each file under "# BUNDLE LOCATION: <path>";
+Admin (once, on the brain box, into a Podclave org bundle):
+  bash examples/managed/output.sh   → auto-detects host (sprite-env info) + secret
+                                       (~/.know/secret); prints each file under
+                                       "# BUNDLE LOCATION: <path>", know-identity.sh filled in;
                                        paste each block into the bundle at that path
-  set KNOW_HOST + KNOW_SECRET in the bundle's know-identity.sh (values from the install card)
 
 End user (zero action):
   launch `claude`

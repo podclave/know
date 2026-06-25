@@ -77,5 +77,12 @@ echo "$filled" | grep -q 'KNOW_HOST="h.example.test"'   && ok "output.sh fills K
 echo "$filled" | grep -q 'KNOW_SECRET="deadbeefcafe"'   && ok "output.sh fills KNOW_SECRET" || no "output.sh did not fill KNOW_SECRET"
 echo "$filled" | grep -qF '<brain-host>'                && no "output.sh left a <brain-host> placeholder when values were passed" || ok "no placeholder left when values passed"
 
+# 7. output.sh auto-detects the secret from ~/.know/secret (no env var needed). Use a fake
+#    HOME so we don't depend on a real install; pass KNOW_HOST to satisfy the host half.
+fakehome="$(mktemp -d)"; mkdir -p "$fakehome/.know"; printf 'abc123sekret\n' > "$fakehome/.know/secret"
+auto="$(HOME="$fakehome" KNOW_HOST=h.example.test bash "$OUT" 2>/dev/null || true)"
+rm -rf "$fakehome"
+echo "$auto" | grep -q 'KNOW_SECRET="abc123sekret"' && ok "output.sh auto-reads ~/.know/secret" || no "output.sh did not auto-read ~/.know/secret"
+
 echo ""; echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

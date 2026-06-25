@@ -172,11 +172,11 @@ The connector URL is fully env-driven, so the admin sets everything in **one pla
 3. **`/etc/claude-code/managed-settings.d/50-know.json`** — a drop-in that auto-allows the six `know` tools (recall/save never prompt; the curation gate is the in-conversation approval) and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order and `permissions.allow` concatenates, so it coexists with other managed settings.
 4. The nudge script ships at `client-plugin/nudge.py`; place a copy in the bundle at `/etc/claude-code/know/nudge.py`.
 
-Placing files in a bundle is manual, so run [`examples/managed/output.sh`](examples/managed/)
-with your brain's host + secret (the installer's onboarding card prints a ready-to-paste
-command): `KNOW_HOST=… KNOW_SECRET=… bash examples/managed/output.sh`. It prints every file
-above under a `# BUNDLE LOCATION: <path>` banner — paste each block into the bundle at the
-path shown, with `know-identity.sh` already filled in. This is an alternative to the
+Placing files in a bundle is manual, so on the brain box run
+[`examples/managed/output.sh`](examples/managed/): it auto-detects this brain's host +
+secret (from `~/.know/secret` and `sprite-env info`) and prints every file above under a
+`# BUNDLE LOCATION: <path>` banner — paste each block into the bundle at the path shown,
+with `know-identity.sh` already filled in. This is an alternative to the
 per-user plugin / bare-connector paths above, not a replacement. The `/know:*` slash
 commands are not provisioned this way (they need the plugin); the nudge + natural language
 already drive recall/save/commit.
