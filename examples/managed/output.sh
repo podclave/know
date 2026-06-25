@@ -5,7 +5,7 @@
 # bundle at the path shown.
 #
 # Run it on the brain box (the same place you ran the installer) and it auto-fills
-# know-identity.sh: the secret is read from ~/.know/secret and the host from `sprite-env
+# .env.podclave.know: the secret is read from ~/.know/secret and the host from `sprite-env
 # info` — exactly where the installer put them. To generate the blocks somewhere else,
 # override with env vars: KNOW_HOST=your-brain.example.com KNOW_SECRET=<secret> bash output.sh
 set -eu
@@ -24,14 +24,17 @@ if [ -z "$KNOW_HOST" ]; then
 fi
 
 # banner <bundle-path> <owner> <mode> — names the destination and the ownership/perms to
-# set in the bundle (all overlay files are root-owned + world-readable so every user's
-# login shell + `claude` can read them). Trailing blank line keeps the output readable.
+# set in the bundle. The /etc files are root-owned + world-readable so every user's
+# `claude` can read them; .env.podclave.know is the box user's home dotfile (owner sprite).
+# Trailing blank line keeps the output readable.
 banner() { printf '\n# ===== BUNDLE LOCATION: %s =====\n# owner: %s   mode: %s\n\n' "$1" "$2" "$3"; }
 exists() { [ -f "$1" ] || { echo "MISSING: $1" >&2; exit 1; }; }
 
-ID="$HERE/etc/profile.d/know-identity.sh"
+ID="$HERE/env.podclave.know"
 exists "$ID"
-banner /etc/profile.d/know-identity.sh root 0644
+# .env.podclave.know is home-relative — Podclave sources it in every shell automatically
+# (/etc/profile.d is NOT sourced on Sprites). Owner is the box user (sprite), not root.
+banner .env.podclave.know sprite 0644
 if [ -n "$KNOW_HOST" ] && [ -n "$KNOW_SECRET" ]; then
   # hex secret + hostname are sed-safe with a '|' delimiter
   sed -e "s|<brain-host>|${KNOW_HOST}|" -e "s|<shared-secret>|${KNOW_SECRET}|" "$ID"

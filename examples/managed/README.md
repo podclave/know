@@ -12,7 +12,7 @@ installer), run:
 It prints every file the admin needs, each under a `# BUNDLE LOCATION: <path>` banner —
 paste each block into the bundle at the path shown. It **auto-detects this brain's host +
 secret** (secret from `~/.know/secret`, host from `sprite-env info` — where the installer
-put them) and emits `know-identity.sh` already filled in. Running off-box instead? Override
+put them) and emits `.env.podclave.know` already filled in. Running off-box instead? Override
 with `KNOW_HOST=… KNOW_SECRET=… bash examples/managed/output.sh`; with neither it prints the
 `<brain-host>`/`<shared-secret>` placeholders to edit by hand. `KNOW_USER` is always filled
 per-user automatically from the Podclave identity file, and the JSON files are emitted
@@ -21,17 +21,20 @@ verbatim (no per-deploy placeholders).
 ## Files
 
 (Destinations, owner, and mode come from `output.sh`; these descriptions are just what
-each file does. All four are owner `root`, mode `0644` — world-readable so every user's
-login shell and `claude` can read them.)
+each file does. The three `/etc` files are owner `root`, mode `0644` — world-readable so
+every user's `claude` can read them. `.env.podclave.know` is the box user's home dotfile,
+owner `sprite`, mode `0644`.)
 
-- `etc/profile.d/know-identity.sh`
-  The one place env is set. `KNOW_HOST` + `KNOW_SECRET` are admin-filled (no default — if
-  unset the connector URL is plainly broken, which beats silently routing somewhere
-  wrong). `KNOW_USER` is bridged from the per-user identity **file** `~/.podclave/user-email`
+- `env.podclave.know` → placed at `.env.podclave.know`
+  The one place env is set. **Podclave sources `.env.podclave.*` in every shell
+  automatically** — this is the reliable bridge (`/etc/profile.d` is NOT sourced on
+  Sprites). `KNOW_HOST` + `KNOW_SECRET` are admin-filled (no default — if unset the
+  connector URL is plainly broken, which beats silently routing somewhere wrong).
+  `KNOW_USER` is bridged from the per-user identity **file** `~/.podclave/user-email`
   (managed settings expand env vars, not files); missing file → `anonymous`.
-  The secret lands in a world-readable `/etc` file — the same shared team secret each
-  user's URL carries anyway, so it is no new exposure, but this overlay assumes **one
-  brain per box**; do not use it to mix multiple teams' secrets on one box.
+  It carries the shared team secret — the same one each user's URL carries anyway, so no
+  new exposure, but this overlay assumes **one brain per box**; do not use it to mix
+  multiple teams' secrets on one box.
 
 - `etc/claude-code/managed-mcp.json`
   The per-user connector: `https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER:-anonymous}/`.
@@ -49,5 +52,6 @@ login shell and `claude` can read them.)
 ## Verify after deploy
 
 On a test box: `claude doctor`, then launch `claude` and confirm the `know` tools are
-present without a prompt. If the URL shows `…/anonymous/`, the session didn't inherit the
-`profile.d` env — set the vars wherever Podclave sources session environment.
+present without a prompt. If the URL shows `…/anonymous/`, `.env.podclave.know` wasn't
+sourced — confirm it's placed (Podclave sources `.env.podclave.*` automatically) and that
+`~/.podclave/user-email` exists.
