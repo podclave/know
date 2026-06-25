@@ -43,9 +43,23 @@ brain just stood up.
 
 ## Background facts (researched/verified 2026-06-25)
 
-- **Managed settings** live at `/etc/claude-code/managed-settings.json` and
-  `/etc/claude-code/managed-mcp.json` (Linux), are the highest-precedence tier, and
-  cannot be overridden by user/project settings.
+- **Managed settings** live at `/etc/claude-code/managed-settings.json` (single file) or
+  `/etc/claude-code/managed-settings.d/*.json` (drop-in directory), plus
+  `/etc/claude-code/managed-mcp.json` for MCP (Linux). The managed tier is
+  highest-precedence and cannot be overridden by user/project settings.
+- **`managed-settings.d/` drop-in directory** is confirmed (docs + the 2.1.191 binary):
+  each file is a full settings object; files merge in **lexical filename order**; later
+  files **override scalars, concatenate arrays, and deep-merge objects**. `hooks`,
+  `permissions`, and `${VAR}` expansion behave identically there. Using a drop-in file
+  (e.g. `50-know.json`) means our entries **coexist** with any settings Podclave itself
+  manages, and our `permissions.allow` array **concatenates** with existing entries rather
+  than replacing them — the reason to prefer `.d/` over editing a shared
+  `managed-settings.json`.
+- **No `managed-mcp.d/` drop-in exists** — MCP servers are documented only in the single
+  `/etc/claude-code/managed-mcp.json`. Whether `mcpServers` is honored inside a
+  `managed-settings.d/*.json` file is **undocumented** (settings files normally don't
+  carry `mcpServers`); treat declaring MCP in the drop-in as an unverified optimization,
+  not the default.
 - **MCP server `url` supports env-var expansion** (`${VAR}`, `${VAR:-default}`) evaluated
   per session — so one managed file yields per-user URLs.
 - **`permissions.allow`** in managed settings auto-approves named tools org-wide.
@@ -89,7 +103,20 @@ URL would carry anyway; it grants no more than the per-user URLs already do. An 
 the path segment routes fine (`@`/`.` are legal `pchar`; Starlette URL-decodes either the
 raw `@` or a `%40`-encoded form to the same attribution).
 
-### 3. Permissions + nudge — `/etc/claude-code/managed-settings.json`
+**This stays a single file** — there is no `managed-mcp.d/` drop-in for MCP. If Podclave
+(or another tool) already manages `/etc/claude-code/managed-mcp.json`, the admin **merges
+the `know` entry into the existing `mcpServers` object** rather than overwriting the file.
+*Optional, verify-then-use:* if a later check confirms `mcpServers` is honored inside a
+`managed-settings.d/*.json` drop-in (see Background), the whole overlay can collapse into
+drop-in files and never touch the shared `managed-mcp.json` — but the default design keeps
+MCP in `managed-mcp.json` since the drop-in route is undocumented.
+
+### 3. Permissions + nudge — `/etc/claude-code/managed-settings.d/50-know.json`
+
+A **drop-in** settings file (not the shared `managed-settings.json`), so it coexists with
+anything Podclave manages and its `permissions.allow` concatenates with existing entries.
+The `50-` prefix is a neutral lexical position; our file only adds keys, so merge order is
+not load-bearing.
 
 ```json
 {
@@ -125,14 +152,15 @@ managed and plugin nudge identical by construction.
 
 ## Deliverables
 
-1. **`examples/managed/` (repo)** — the overlay templates, with placeholders:
-   - `managed-mcp.json` (placeholders `<brain-host>`, `<shared-secret>`)
-   - `managed-settings.json` (the permissions + hook block above)
-   - `know-identity.sh` (the profile.d bridge)
-   - `README.md` — a short readme for the dir: what each file is, where it goes
-     (`/etc/claude-code/managed-mcp.json`, `/etc/claude-code/managed-settings.json`,
-     `/etc/profile.d/know-identity.sh`), and the `nudge.py` copy step
-     (`client-plugin/nudge.py` → `/etc/claude-code/know/nudge.py`).
+1. **`examples/managed/` (repo)** — the overlay templates, laid out to **mirror their
+   deploy paths** so an admin can almost `cp -r examples/managed/etc/* /etc/`:
+   - `etc/claude-code/managed-mcp.json` (placeholders `<brain-host>`, `<shared-secret>`)
+   - `etc/claude-code/managed-settings.d/50-know.json` (the permissions + hook block above)
+   - `etc/profile.d/know-identity.sh` (the profile.d bridge)
+   - `README.md` — what each file is, where it goes, the `managed-settings.d/` merge
+     behavior, the "merge the `know` entry into an existing `managed-mcp.json`" note, and
+     the `nudge.py` copy step (`client-plugin/nudge.py` → `/etc/claude-code/know/nudge.py`,
+     which is intentionally NOT in the mirror so there's no second copy of the script).
 
 2. **Top-level `README.md` section** — "Org-wide zero-setup provisioning (Podclave /
    managed settings)": explains the model (admin places static files; users do nothing),
@@ -144,8 +172,8 @@ managed and plugin nudge identical by construction.
 3. **Installer onboarding-card block (`server/install-know.sh`)** — a new **"Org admin
    overlay"** section in the printed card that emits the overlay files **already filled in**
    with this brain's `$SPRITE_URL` host and `$SECRET`, plus the `${KNOW_USER}` template,
-   the `managed-settings.json` block, the `know-identity.sh` line, and the one-line
-   `nudge.py` deploy instruction. The admin can copy these straight onto the org image.
+   the `managed-settings.d/50-know.json` block, the `know-identity.sh` line, and the
+   one-line `nudge.py` deploy instruction. The admin can copy these straight onto the org image.
    This is gated to print always (it's guidance, harmless if the reader isn't an admin),
    appended after the existing connect/visualizer/heartbeat sections.
 
@@ -153,16 +181,16 @@ managed and plugin nudge identical by construction.
 
 ```
 Admin (once, on the org's managed Claude Code image):
-  place /etc/profile.d/know-identity.sh         (file → $KNOW_USER)
-  place /etc/claude-code/managed-mcp.json        (per-user connector URL)
-  place /etc/claude-code/managed-settings.json   (auto-allow tools + nudge hook)
+  place /etc/profile.d/know-identity.sh                  (file → $KNOW_USER)
+  place /etc/claude-code/managed-mcp.json                (per-user connector URL; merge if it exists)
+  place /etc/claude-code/managed-settings.d/50-know.json (auto-allow tools + nudge hook; drop-in)
   copy  client-plugin/nudge.py → /etc/claude-code/know/nudge.py
 
 End user (zero action):
   launch `claude`
     └─ $KNOW_USER resolved from ~/.podclave/user-email
         └─ managed-mcp.json → connector at …/<secret>/<email>/  (tools available, no prompt)
-        └─ managed-settings.json → reads+writes auto-allowed; nudge hook armed
+        └─ managed-settings.d/50-know.json → reads+writes auto-allowed; nudge hook armed
             └─ recall on ask; commit-nudge proposes durable facts; user approves; save
 ```
 
@@ -171,10 +199,12 @@ End user (zero action):
 This deliverable is docs + static templates + a printed installer block — no runtime
 logic. Verification:
 
-- **Template validity:** `managed-mcp.json` and `managed-settings.json` parse as JSON
-  (e.g. `python3 -m json.tool`), and `know-identity.sh` passes `bash -n`. Add a tiny
-  check to the existing install regression or a standalone check that the committed
-  `examples/managed/*.json` are valid JSON and the `.sh` is syntactically valid.
+- **Template validity:** the committed `examples/managed/etc/claude-code/managed-mcp.json`
+  and `examples/managed/etc/claude-code/managed-settings.d/50-know.json` parse as JSON
+  (e.g. `python3 -m json.tool`), and `examples/managed/etc/profile.d/know-identity.sh`
+  passes `bash -n`. Add a standalone check (or a step in the install regression) that
+  every committed `examples/managed/**/*.json` is valid JSON and the `.sh` is syntactically
+  valid.
 - **Tool-name consistency:** the `permissions.allow` entries are exactly the six
   `mcp__know__*` names matching the gateway's tool surface
   (`recall/save/list/supersede/contradictions/resolve`) — assert this against
@@ -193,8 +223,15 @@ logic. Verification:
   falls back to `…/anonymous/`. Mitigation: the `:-anonymous` fallback (graceful, not
   broken); the docs tell the admin to verify and, if needed, set `KNOW_USER` wherever
   Podclave sources session env.
-- **Managed file paths/filenames** (`managed-mcp.json`, `managed-settings.json`) are per
-  the current docs; the implementation note says to verify against the installed CC
-  version before publishing.
+- **Managed file paths/filenames** (`managed-mcp.json`, `managed-settings.d/`) match the
+  current docs and the 2.1.191 binary strings; verify against the installed CC version
+  before publishing.
+- **`managed-settings.d/` vs sibling `managed-settings.json` precedence is undocumented.**
+  We sidestep it by using **only** the `.d/` drop-in (we never write a sibling
+  `managed-settings.json`), so there is no ambiguity in our own footprint.
+- **`mcpServers` inside a settings drop-in is undocumented.** The default keeps MCP in
+  `managed-mcp.json`. If an implement-time check (`claude doctor` / tools available on a
+  test box) confirms a drop-in `mcpServers` loads, the overlay MAY collapse to drop-in
+  files only — but that is an optional optimization, not the shipped default.
 - **Email-as-path-segment:** confirmed routable, but the templates note that if a future
   client URL-encodes differently, attribution still resolves server-side.
