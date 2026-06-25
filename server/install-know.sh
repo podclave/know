@@ -376,6 +376,8 @@ BASE_URL="$SPRITE_URL/mcp/$SECRET"
 WAKE_CMD="KNOW_NAME='$NAME' KNOW_MODEL='$MODEL'"
 [ -n "${KNOW_ALERT_WEBHOOK:-}" ] && WAKE_CMD="$WAKE_CMD KNOW_ALERT_WEBHOOK='$KNOW_ALERT_WEBHOOK'"
 WAKE_CMD="$WAKE_CMD $PYBIN $GW_DIR/wake.py"
+# Bare host (no scheme, no trailing slash) for the org-overlay KNOW_HOST env var.
+KNOW_HOST_VAL="${SPRITE_URL#*://}"; KNOW_HOST_VAL="${KNOW_HOST_VAL%/}"
 if [ "$REMOTE_MODE" = remote ]; then
   BACKUP_LINE="Backup + restore: this brain mirrors its KB to
       $REMOTE_URL
@@ -440,35 +442,22 @@ cat <<EOF
   HTTP endpoint anymore.)
   -------------------------------------------------------------------
   ORG ADMINS (Podclave): provision EVERY user with zero setup — no plugin, no URL paste.
-  As the org admin, drop these static files on the managed Claude Code image:
+  Drop the overlay's static files into a Podclave org bundle (templates live in the know
+  repo at examples/managed/, mirroring their deploy paths):
 
-  1) /etc/profile.d/know-identity.sh   (turns the per-user identity file into an env var)
-       export KNOW_USER="\$(cat "\$HOME/.podclave/user-email" 2>/dev/null || echo anonymous)"
+  • examples/managed/etc/* — copy into <org-bundle>/etc/ (the connector + the
+    settings drop-in that auto-allows the know tools and arms the commit-nudge hook).
+  • client-plugin/nudge.py — copy it into the bundle at
+    <org-bundle>/etc/claude-code/know/nudge.py (so it lands at /etc/claude-code/know/nudge.py).
 
-  2) /etc/claude-code/managed-mcp.json   (per-user connector; merge into it if it exists)
-       {
-         "mcpServers": {
-           "know": {
-             "type": "http",
-             "url": "$SPRITE_URL/mcp/$SECRET/\${KNOW_USER:-anonymous}/"
-           }
-         }
-       }
+  Then set THIS brain's values in <org-bundle>/etc/profile.d/know-identity.sh — the one
+  place env is set (KNOW_USER is filled per-user automatically):
 
-  3) /etc/claude-code/managed-settings.d/50-know.json   (auto-allow know tools + nudge hook)
-       {
-         "permissions": { "allow": [
-           "mcp__know__recall","mcp__know__list","mcp__know__contradictions",
-           "mcp__know__save","mcp__know__supersede","mcp__know__resolve" ] },
-         "hooks": { "UserPromptSubmit": [ { "hooks": [
-           { "type": "command", "command": "python3 /etc/claude-code/know/nudge.py" } ] } ] }
-       }
+      export KNOW_HOST="$KNOW_HOST_VAL"
+      export KNOW_SECRET="$SECRET"
 
-  4) Deploy the nudge script:
-       install -D -m 0644 client-plugin/nudge.py /etc/claude-code/know/nudge.py
-
-  Templates + details: examples/managed/ in the know repo. (Recall/save then work with no
-  prompt; the secret in the URL is the same shared team secret — treat the file accordingly.)
+  Recall/save then work with no prompt. The secret is the same shared team secret each
+  user's URL carries anyway — treat the bundle accordingly (one brain per box).
   -------------------------------------------------------------------
   KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================

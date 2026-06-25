@@ -161,25 +161,25 @@ plugin. Use Claude Code.
 
 Running an org? Instead of each teammate installing the plugin or pasting a URL, an admin
 can provision **every** user at once with Claude Code **managed settings** — users do
-nothing and `know` is just there on first launch.
+nothing and `know` is just there on first launch. Drop the overlay's static files into a
+**Podclave org bundle**.
 
-The per-user identity lives in the file `~/.podclave/user-email`. Because managed settings
-expand environment variables (not files), a tiny `/etc/profile.d` bridge turns it into
-`$KNOW_USER`, which the connector URL templates per user:
+The connector URL is fully env-driven, so the admin sets everything in **one place** —
+`/etc/profile.d/know-identity.sh` — and the JSON files are copied verbatim:
 
-1. **`/etc/profile.d/know-identity.sh`** — `export KNOW_USER="$(cat "$HOME/.podclave/user-email" 2>/dev/null || echo anonymous)"`
-2. **`/etc/claude-code/managed-mcp.json`** — the connector, `https://<brain-host>/mcp/<shared-secret>/${KNOW_USER:-anonymous}/` (one shared file; no `managed-mcp.d/` exists — merge the `know` entry in if the file is already managed).
+1. **`/etc/profile.d/know-identity.sh`** — sets `KNOW_HOST` and `KNOW_SECRET` (your brain's, from the installer card) and bridges the per-user identity **file** `~/.podclave/user-email` into `KNOW_USER` (managed settings expand env vars, not files; missing → `anonymous`). `KNOW_HOST`/`KNOW_SECRET` carry no default — if unset the URL is plainly broken rather than silently wrong.
+2. **`/etc/claude-code/managed-mcp.json`** — the connector, `https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER:-anonymous}/` (one shared file; no `managed-mcp.d/` exists — merge the `know` entry in if the file is already managed).
 3. **`/etc/claude-code/managed-settings.d/50-know.json`** — a drop-in that auto-allows the six `know` tools (recall/save never prompt; the curation gate is the in-conversation approval) and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order and `permissions.allow` concatenates, so it coexists with other managed settings.
-4. Copy the nudge script: `install -D -m 0644 client-plugin/nudge.py /etc/claude-code/know/nudge.py`.
+4. The nudge script ships at `client-plugin/nudge.py`; place a copy in the bundle at `etc/claude-code/know/nudge.py` (→ `/etc/claude-code/know/nudge.py`).
 
 Ready-to-use templates (mirroring the deploy paths) live in [`examples/managed/`](examples/managed/),
-and the installer's onboarding card prints all of the above **already filled in** with your
-brain's host + secret. This is an alternative to the per-user plugin / bare-connector paths
-above, not a replacement. The `/know:*` slash commands are not provisioned this way (they
-need the plugin); the nudge + natural language already drive recall/save/commit.
+and the installer's onboarding card prints your brain's `KNOW_HOST`/`KNOW_SECRET` values to
+paste into `know-identity.sh`. This is an alternative to the per-user plugin / bare-connector
+paths above, not a replacement. The `/know:*` slash commands are not provisioned this way
+(they need the plugin); the nudge + natural language already drive recall/save/commit.
 
 Two things to verify on a test box: that the `claude` session inherits the `profile.d`
-env (else the URL falls back to `…/anonymous/` — set `KNOW_USER` wherever Podclave sources
+env (else the URL falls back to `…/anonymous/` — set the vars wherever Podclave sources
 session env), and the managed-file paths against your installed Claude Code version.
 
 ## Browse the brain (OKF visualizer)

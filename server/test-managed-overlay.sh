@@ -23,9 +23,19 @@ while IFS= read -r f; do
 done < <(find "$MGD" -name '*.json')
 [ "$found_json" = 1 ] && ok "found overlay JSON templates" || no "no JSON templates under examples/managed"
 
-# 2. profile.d bridge is valid shell
+# 2. profile.d bridge is valid shell and sets all three env vars in one place
 SH="$MGD/etc/profile.d/know-identity.sh"
 if [ -f "$SH" ] && bash -n "$SH" 2>/dev/null; then ok "know-identity.sh syntax ok"; else no "know-identity.sh missing or bad syntax"; fi
+for v in KNOW_HOST KNOW_SECRET KNOW_USER; do
+  grep -qE "^export $v=" "$SH" 2>/dev/null && ok "know-identity.sh exports $v" || no "know-identity.sh does not export $v"
+done
+
+# 2b. the connector URL is env-driven (no <placeholders> left to hand-edit per deploy)
+MCP="$MGD/etc/claude-code/managed-mcp.json"
+for tok in '${KNOW_HOST}' '${KNOW_SECRET}' '${KNOW_USER'; do
+  grep -qF "$tok" "$MCP" 2>/dev/null && ok "managed-mcp.json references $tok" || no "managed-mcp.json missing $tok"
+done
+if grep -qE '<[a-z-]+>' "$MCP" 2>/dev/null; then no "managed-mcp.json still has a <placeholder> (should be env-driven)"; else ok "managed-mcp.json has no <placeholders>"; fi
 
 # 3. no stray nudge.py copy in the overlay (single source is client-plugin/nudge.py)
 if find "$MGD" -name 'nudge.py' | grep -q .; then no "stray nudge.py under examples/managed (must reference client-plugin/nudge.py)"; else ok "no stray nudge.py copy"; fi

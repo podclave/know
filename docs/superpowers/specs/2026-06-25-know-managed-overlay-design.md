@@ -16,8 +16,8 @@ version of the guidance.
 
 This design adds that: a documented set of admin-placed static files that give every org
 user the `know` connector **and** the commit-nudge curation UX with **zero per-user
-action**, plus an installer card block that prints those files already filled in for the
-brain just stood up.
+action**, plus an installer card block that points the admin at the templates and prints
+this brain's `KNOW_HOST`/`KNOW_SECRET` values to paste into the one env file.
 
 ## Goals
 
@@ -76,12 +76,18 @@ brain just stood up.
 ### 1. Identity bridge — `/etc/profile.d/know-identity.sh`
 
 ```sh
-# Expose the Podclave per-user identity (a file) as an env var managed-mcp.json can expand.
+# The ONE place the admin sets the overlay's env. managed-mcp.json expands all three.
+export KNOW_HOST="<brain-host>"        # host only, no scheme
+export KNOW_SECRET="<shared-secret>"   # the shared team secret
 export KNOW_USER="$(cat "$HOME/.podclave/user-email" 2>/dev/null || echo anonymous)"
 ```
 
-Turns `~/.podclave/user-email` into `$KNOW_USER`. The `|| echo anonymous` keeps a missing
-file from producing a broken URL — attribution degrades to `anonymous`, nothing breaks.
+`KNOW_HOST` and `KNOW_SECRET` are the brain's, admin-filled (the installer card prints the
+values) — **no default**, so a misconfigured box yields a plainly broken URL (visible)
+rather than silently routing somewhere wrong. `KNOW_USER` bridges `~/.podclave/user-email`
+into an env var (managed settings expand env vars, not files); `|| echo anonymous` keeps a
+missing file from producing a broken URL — attribution degrades to `anonymous`. Putting all
+three here means the admin edits **one file**; the JSON templates are copied verbatim.
 
 ### 2. Connector — `/etc/claude-code/managed-mcp.json`
 
@@ -90,16 +96,17 @@ file from producing a broken URL — attribution degrades to `anonymous`, nothin
   "mcpServers": {
     "know": {
       "type": "http",
-      "url": "https://<brain-host>/mcp/<shared-secret>/${KNOW_USER:-anonymous}/"
+      "url": "https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER:-anonymous}/"
     }
   }
 }
 ```
 
-Per-user attribution with no plugin, no typing, no keychain. `<brain-host>` and
-`<shared-secret>` are the brain's, baked in by the admin (or by the installer card). The
-shared secret in `/etc` is acceptable — it is the same team secret every user's connector
-URL would carry anyway; it grants no more than the per-user URLs already do. An email as
+Per-user attribution with no plugin, no typing, no keychain — and **no per-deploy
+placeholders**: the URL is fully env-driven from `know-identity.sh`, so this file is copied
+verbatim. The shared secret in `/etc` is acceptable — it is the same team secret every
+user's connector URL would carry anyway; it grants no more than the per-user URLs already
+do (one brain per box). An email as
 the path segment routes fine (`@`/`.` are legal `pchar`; Starlette URL-decodes either the
 raw `@` or a `%40`-encoded form to the same attribution).
 
@@ -153,38 +160,37 @@ managed and plugin nudge identical by construction.
 ## Deliverables
 
 1. **`examples/managed/` (repo)** — the overlay templates, laid out to **mirror their
-   deploy paths** so an admin can almost `cp -r examples/managed/etc/* /etc/`:
-   - `etc/claude-code/managed-mcp.json` (placeholders `<brain-host>`, `<shared-secret>`)
+   deploy paths** so an admin can `cp -r examples/managed/etc/* <org-bundle>/etc/`:
+   - `etc/claude-code/managed-mcp.json` (env-driven URL — no placeholders; copied verbatim)
    - `etc/claude-code/managed-settings.d/50-know.json` (the permissions + hook block above)
-   - `etc/profile.d/know-identity.sh` (the profile.d bridge)
-   - `README.md` — what each file is, where it goes, the `managed-settings.d/` merge
-     behavior, the "merge the `know` entry into an existing `managed-mcp.json`" note, and
-     the `nudge.py` copy step (`client-plugin/nudge.py` → `/etc/claude-code/know/nudge.py`,
-     which is intentionally NOT in the mirror so there's no second copy of the script).
+   - `etc/profile.d/know-identity.sh` (the one place env is set: `KNOW_HOST`/`KNOW_SECRET`/`KNOW_USER`)
+   - `README.md` — what each file is, where it goes, the one-file-to-edit model, the
+     `managed-settings.d/` merge behavior, the "merge the `know` entry into an existing
+     `managed-mcp.json`" note, and the `nudge.py` step (ships at `client-plugin/nudge.py`;
+     copy into the bundle at `etc/claude-code/know/nudge.py` — intentionally NOT mirrored,
+     so there's no second copy of the script).
 
 2. **Top-level `README.md` section** — "Org-wide zero-setup provisioning (Podclave /
-   managed settings)": explains the model (admin places static files; users do nothing),
-   the identity bridge, the three placed files + the nudge copy, the reads-and-writes
-   auto-allow rationale, and the two documented assumptions (profile.d env inheritance;
-   exact managed paths per CC version). Cross-links `examples/managed/`. Positioned as an
-   alternative to the existing per-user plugin / bare-connector paths, not a replacement.
+   managed settings)": explains the model (admin drops files into a Podclave org bundle;
+   users do nothing), the one-file env model, the placed files + the nudge copy, the
+   reads-and-writes auto-allow rationale, and the two documented assumptions (profile.d env
+   inheritance; exact managed paths per CC version). Cross-links `examples/managed/`.
+   Positioned as an alternative to the per-user plugin / bare-connector paths, not a replacement.
 
 3. **Installer onboarding-card block (`server/install-know.sh`)** — a new **"Org admin
-   overlay"** section in the printed card that emits the overlay files **already filled in**
-   with this brain's `$SPRITE_URL` host and `$SECRET`, plus the `${KNOW_USER}` template,
-   the `managed-settings.d/50-know.json` block, the `know-identity.sh` line, and the
-   one-line `nudge.py` deploy instruction. The admin can copy these straight onto the org image.
-   This is gated to print always (it's guidance, harmless if the reader isn't an admin),
-   appended after the existing connect/visualizer/heartbeat sections.
+   overlay"** section in the printed card. It does NOT repeat the template file contents
+   (those live in `examples/managed/`); it points the admin at the templates + the bundle
+   paths, and prints THIS brain's values to paste into `know-identity.sh`: `KNOW_HOST`
+   (host from `$SPRITE_URL`, scheme stripped) and `KNOW_SECRET` (`$SECRET`). Gated to print
+   always (harmless guidance), appended after the connect/visualizer/heartbeat sections.
 
 ## Data flow (after)
 
 ```
-Admin (once, on the org's managed Claude Code image):
-  place /etc/profile.d/know-identity.sh                  (file → $KNOW_USER)
-  place /etc/claude-code/managed-mcp.json                (per-user connector URL; merge if it exists)
-  place /etc/claude-code/managed-settings.d/50-know.json (auto-allow tools + nudge hook; drop-in)
-  copy  client-plugin/nudge.py → /etc/claude-code/know/nudge.py
+Admin (once, into a Podclave org bundle):
+  cp -r examples/managed/etc/* <org-bundle>/etc/        (connector + settings drop-in + bridge)
+  cp client-plugin/nudge.py <org-bundle>/etc/claude-code/know/nudge.py
+  edit <org-bundle>/etc/profile.d/know-identity.sh      (set KNOW_HOST + KNOW_SECRET)
 
 End user (zero action):
   launch `claude`
