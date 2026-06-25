@@ -7,12 +7,11 @@ store + the recall `claude` agent.
 Lifecycle (spec §10): spin-down-native. A `save` schedules an event-driven
 secretary pass at the tail of the write that woke the box (debounced, single-flight,
 holding a Sprite keep-alive so the box can't suspend mid-curation). The one event
-the box can't see — an off-box mirror push — rides the external /wake pinger, which
-also runs the auth probe + a curator-liveness check and alerts on auth failure.
+the box can't see — an off-box mirror push — is handled by the wake.py CLI, which
+a scheduler runs hourly to pull the mirror, reconcile if it moved, and report liveness.
 """
 import asyncio
 import hmac
-import os
 import time
 from pathlib import Path
 
@@ -21,7 +20,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 import config
-from boot_check import auth_probe
 from mcp_endpoint import build_router
 from recall import recall as recall_agent
 from secretary import contradiction_records, resolve_contradiction, run_pass
@@ -131,7 +129,7 @@ async def _curate(reason: str) -> dict:
             pass
     # Self-retrigger: a pass is budget/turn-bounded, so a backlog bigger than one pass
     # can drain (e.g. a bulk ingest) leaves raw/ non-empty. Re-fire soon so it drains in
-    # minutes rather than one chunk per hourly /wake. Guarded on real progress
+    # minutes rather than one chunk per hourly wake run. Guarded on real progress
     # (moved_to_superseded>0) so a fact that can't be represented can't spin a tight loop.
     if (isinstance(result, dict) and result.get("status") == "committed"
             and result.get("raw_remaining", 0) > 0
@@ -153,7 +151,7 @@ async def _drain_curate():
 async def _debounced_curate():
     await asyncio.sleep(CURATE_DEBOUNCE)
     if (time.time() - CURATE["last_run"]) < CURATE_MIN_SECS and CURATE["last_run"]:
-        CURATE["scheduled"] = False  # too soon; the next /wake or save will cover it
+        CURATE["scheduled"] = False  # too soon; the next wake run or save will cover it
         return
     await _curate("activity")
 
@@ -202,58 +200,3 @@ app.add_api_route("/viewer/{path_secret}/", _viewer, methods=["GET"])
 app.add_api_route("/viewer/{path_secret}", _viewer, methods=["GET"])
 
 
-async def _alert(text: str):
-    """Push an out-of-band alert (Slack webhook) on auth failure — a spun-down box
-    can't cron itself, so /wake is the only place this fires. Best-effort."""
-    hook = os.environ.get("KNOW_ALERT_WEBHOOK", "").strip()
-    if not hook:
-        return
-    try:
-        async with httpx.AsyncClient(timeout=10) as c:
-            await c.post(hook, json={"text": f"[know:{config.NAME}] {text}"})
-    except Exception:  # noqa: BLE001
-        pass
-
-
-def _last_secretary_age() -> float | None:
-    """Seconds since the last secretary commit (curator-liveness), or None."""
-    out = _git(KB_REPO, "log", "--format=%ct", f"--author={config.SECRETARY_IDENTITY[1]}",
-               "-1", check=False).stdout.strip()
-    return (time.time() - float(out)) if out else None
-
-
-@app.post("/wake")
-@app.get("/wake")
-async def wake():
-    """The external-heartbeat route (spec §10.8): auth probe (+alert), pull the
-    off-box mirror, reconcile (curation pass) if it brought human edits, and report
-    curator liveness. Plain HTTP — the external pinger just poke this."""
-    out = {"name": config.NAME, "woke": time.time()}
-
-    # 1. auth probe — distinct, loud, alerts out-of-band on failure
-    ok, msg = await asyncio.to_thread(auth_probe)
-    out["auth"] = "ok" if ok else "FAILED"
-    if not ok:
-        out["auth_detail"] = msg
-        await _alert(f"AUTH FAILURE: {msg}")
-
-    # 2. pull the mirror (the one event the box can't see) + reconcile if it moved
-    try:
-        remotes = _git(KB_REPO, "remote", check=False).stdout.split()
-        if config.MIRROR_REMOTE in remotes:
-            before = _git(KB_REPO, "rev-parse", "HEAD", check=False).stdout.strip()
-            await asyncio.to_thread(_git, KB_REPO, "pull", "--ff-only",
-                                    config.MIRROR_REMOTE, check=False)
-            after = _git(KB_REPO, "rev-parse", "HEAD", check=False).stdout.strip()
-            out["mirror"] = "pulled new commits" if before != after else "up to date"
-            if before != after and ok:
-                out["reconcile"] = (await _curate("wake-reconcile")).get("status")
-    except Exception as e:  # noqa: BLE001
-        out["mirror_error"] = str(e)
-
-    # 3. curator liveness + KB inventory for operators
-    age = await asyncio.to_thread(_last_secretary_age)
-    out["last_curation_secs_ago"] = round(age) if age is not None else None
-    out.update(await asyncio.to_thread(kb_snapshot, KB_REPO))
-    out["curation_scheduled"] = CURATE["scheduled"]
-    return out
