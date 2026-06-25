@@ -134,9 +134,15 @@ liveness) is factored so both the live save-triggered curation and the `know wak
 call it.
 
 ### Scheduling
-- **Sprite:** the installer registers a Podclave Schedule that runs `know wake` hourly
-  (Schedules run a real command and wake a spun-down box).
-- **Plain VM:** documented `crontab` line running `know wake` hourly.
+Podclave Schedules are a control-plane feature — there is no local Sprite API
+(`/v1/schedules` 404s) the installer can call to self-register one. So the installer
+**prints the exact command to schedule**; the operator wires it:
+- **Sprite:** create a Podclave Schedule (control plane) running the printed
+  `wake` command hourly (Schedules run a real command and wake a spun-down box).
+- **Plain VM:** a `crontab` line running the same command hourly.
+
+The printed command is the venv-python invocation, e.g.
+`$HOME/know-gateway/.venv/bin/python $HOME/know-gateway/wake.py`.
 
 ---
 
