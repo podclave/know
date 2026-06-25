@@ -1,7 +1,7 @@
 {
   "name": "know",
-  "version": "0.3.0",
-  "description": "Your team's shared brain in Claude Code — recall durable team/project facts, save new ones, and surface & resolve contradictions, with optional passive capture. Bundles the MCP connector + /know:* commands; configure it with your personal connector URL (the URL is the credential).",
+  "version": "0.4.0",
+  "description": "Your team's shared brain in Claude Code — recall durable team/project facts, save new ones, and surface & resolve contradictions, with an opt-out nudge to commit learnings you approve. Bundles the MCP connector + /know:* commands; configure it with your personal connector URL (the URL is the credential).",
   "author": { "name": "know" },
   "license": "MIT",
   "defaultEnabled": false,

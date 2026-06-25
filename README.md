@@ -8,7 +8,7 @@ of one-fact-per-file markdown — the git repo is the truth — wrapped in an
 MCP-over-HTTP server you connect to as a single URL.
 
 **Claude Code is the home surface:** install the `know` plugin (one step — the MCP
-connector + `/know:` commands + optional passive capture) and point it at your personal
+connector + `/know:` commands + an opt-out nudge to commit learnings you approve) and point it at your personal
 URL. claude.ai / Desktop / Cowork can connect to the same URL, but there a connector is
 account-global and needs manual settings — prefer Claude Code (see Connect below).
 
@@ -19,7 +19,7 @@ account-global and needs manual settings — prefer Claude Code (see Connect bel
 ## How it works
 
 ```
-   external pinger (hourly) ──poke──▶  <brain>/wake   (auth probe · pull remote · reconcile · liveness)
+   scheduled wake (hourly) ──run──▶  wake.py  (pull mirror · reconcile off-box edits)
                                           │
    ┌──────────────────────────────────────▼─────────────────────────────┐
    │  BRAIN — one Sprite, a supervised FastAPI MCP-over-HTTP service       │
@@ -40,7 +40,7 @@ account-global and needs manual settings — prefer Claude Code (see Connect bel
   webhook). MCP auth is optional and every connector surface accepts a no-auth URL —
   no bearer header (the web UIs have no field for one), no OAuth subsystem to age out.
   The `<name>` segment is self-asserted attribution stamped on saves.
-- **The brain authenticates to Anthropic with a static API key**, scoped to the service only.
+- **The brain runs the Claude Agent SDK** and uses whatever Claude auth already works on the box — it makes no claims about auth and provisions nothing. Running a server agent on a personal subscription is technically fine but against the spirit of subscription auth; choose with eyes open.
 - **Storage:** `raw/` (append-only capture) → `curated/` (the polished read path the
   secretary owns) → `_superseded/` (retired; nothing is ever `rm`'d). Methodology lives
   in the repo's own [`CLAUDE.md`](server/kb-template/CLAUDE.md).
@@ -54,8 +54,7 @@ account-global and needs manual settings — prefer Claude Code (see Connect bel
 
 ## Install (stand up a brain)
 
-On a **public** Sprite (or any host — see below) with an `ANTHROPIC_API_KEY` available
-(default: the `sk-` line of `~/ANTHROPIC_API_KEY`):
+On a **public** Sprite (or any host — see below) with a working `claude` on the box:
 
 ```bash
 bash server/install-know.sh [--name <label>] [--remote <clone-url> | --no-remote]
@@ -73,10 +72,7 @@ No Node or system `claude` needed: the agent runtime is the **Claude Agent SDK's
 native CLI**, installed into the gateway venv by `pip` — self-contained, version-pinned
 by the SDK, and isolated from any interactive `claude` on the box. The installer pins the
 cheapest dated model id + records the bundled CLI version, mints the secret, sets up the KB
-git repo (seed a fresh one, restore from your remote, or `--no-remote`), creates the supervised service
-with the API key scoped to it, runs an **ordered boot self-check** (auth → agent runtime →
-model-resolves — refuses to report green on any failure), smoke-tests a real save+recall,
-and prints an onboarding card with your connect URL and the `/wake` heartbeat URL.
+git repo (seed a fresh one, restore from your remote, or `--no-remote`), creates the supervised service, runs an **agent-runtime check** (SDK bundled CLI) plus a real save+recall smoke (which warns, not dies, if the agent can't run), and prints an onboarding card with your connect URL.
 
 Because the runtime is just a `pip install` (no Node, no global CLI, no `claude update`),
 the same script stands a brain up on a plain VM — e.g. a DigitalOcean droplet — not only a
@@ -85,7 +81,7 @@ run the gateway under any supervisor.)
 
 Flags: `--name <label>` (display name; default `know`), `--remote <clone-url>` / `--no-remote`.
 Env: `KNOW_MODEL=<id>` (pin a specific model on (re)install), `KNOW_ALERT_WEBHOOK=<slack-webhook>`
-(auth-failure alerts), `ANTHROPIC_API_KEY` (or its `_FILE`).
+(alert on reconcile failures).
 
 ## Backup & restore (the git remote)
 
@@ -112,8 +108,8 @@ write access) — a least-privilege, per-box credential scoped to that one repo.
 team runs the brain. This URL **is** the credential — treat it like a password.
 
 **2. Install the `know` plugin, scoped to the folder you want it in.** You get the
-connector + the `/know:recall`, `/know:ingest`, `/know:contradictions`, `/know:resolve`
-commands + optional capture. Use `--scope local` (this folder, just you) — **never** the default `user` scope,
+connector + the `/know:recall`, `/know:ingest`, `/know:contradictions`, `/know:resolve`, `/know:commit`
+commands + an opt-out nudge to commit learnings. Use `--scope local` (this folder, just you) — **never** the default `user` scope,
 which enables the brain in *every* folder you open:
 
 ```
@@ -151,7 +147,7 @@ brain auto-enables **per-project** for everyone on clone + trust:
 Reads auto-approve; `save`/`supersede`/`resolve` still prompt. Each teammate sets their own
 URL once via the plugin config — only the non-secret settings are committed.
 
-**Bare connector** (no `/know:` commands or capture): `claude mcp add --transport http --scope local know "<your-connector-url>"`.
+**Bare connector** (no `/know:` commands): `claude mcp add --transport http --scope local know "<your-connector-url>"`.
 
 ### claude.ai / Cowork — not recommended
 
@@ -171,27 +167,29 @@ visualizer rendered on demand from the live bundle; same secret-in-path as the c
 
 ## Keeping it alive
 
-A brain spins down when idle and auto-resumes on first connect. Normal capture wakes
-the box and triggers curation. The one event the box can't see — an off-box edit pushed
-to the remote — rides an **external pinger** (Podclave Schedule, GitHub Actions cron, or
-any uptime monitor) that POSTs to `<brain>/wake` hourly: it runs the auth probe (and
-alerts on failure), pulls the remote, reconciles human edits, and reports curator
-liveness. A spun-down box can't cron itself, so this pinger is required.
+A brain spins down when idle and auto-resumes on first connect. The one event the box
+can't see while idle — an off-box edit pushed to the remote — is handled by the
+**scheduled `wake.py` heartbeat**: run it hourly via Podclave Schedule (on Sprite) or a
+plain crontab entry on a VM. It pulls the remote and reconciles any human edits. There
+is no `/wake` HTTP endpoint; the heartbeat is a direct CLI command.
 
-## Passive capture (part of the plugin)
+## Commit learnings (the nudge)
 
-The `know` plugin also ships an optional Stop/SessionEnd hook that distills durable facts
-from each Claude Code session and saves them — a CLI-only nicety the design does **not**
-rely on (model-initiated `save` already works without it; web surfaces have no hook). It
-reuses the same `mcp_url` you set at install, so there's nothing extra to configure.
+The `know` plugin ships a `UserPromptSubmit` nudge: when a session has built up durable
+facts, it prompts Claude to propose them for your approval — nothing is saved without your
+yes. Use `/know:commit` at any point to trigger this on demand. Tunables: set
+`KNOW_NUDGE=0` to disable the automatic nudge, `KNOW_NUDGE_MIN_TURNS` to raise the
+minimum turns before it fires (default 6), or `KNOW_NUDGE_GAP_TURNS` to widen the
+cooldown between nudges (default 8). The nudge reuses the same `mcp_url` you set at
+install — nothing extra to configure.
 
 ## Editing the brain directly (power users)
 
 Clone the remote, edit any fact, commit, push. The secretary detects your edit by git
 author and treats it as **authoritative** — it never clobbers a human edit, and a machine
 fact that contradicts yours becomes an open record in `contradictions/` (recall flags it
-as disputed; `/wake` reports the open count). Editing the disputed fact **closes** the
-record automatically. Reconcile happens on the next `/wake` (≈ one heartbeat interval).
+as disputed; the observables report the open count). Editing the disputed fact **closes**
+the record automatically. Reconcile happens on the next scheduled `wake` heartbeat.
 
 ## Security note — the secret is in the URL
 

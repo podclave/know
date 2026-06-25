@@ -26,8 +26,8 @@ rendered as an interactive graph by the OKF static visualizer — with zero lock
 
 ## Layout
 
-- `raw/` — append-only capture, one fact per file. Written by the `save` tool and
-  passive capture. **Never edited in place.** This is the write path: cheap, always-accept.
+- `raw/` — append-only capture, one fact per file. Written by the `save` tool.
+  **Never edited in place.** This is the write path: cheap, always-accept.
   (Staging, not part of the published OKF bundle.)
 - `curated/` — **the OKF bundle**: the polished, deduped, organized **read path**, owned
   by the secretary. Recall searches here first. Each `curated/<slug>.md` is an OKF concept
@@ -105,7 +105,7 @@ Folding a pile of docs into the bundle:
   your work authoritative; the box never clobbers a human-authored fact.
 
 `curated/index.md`, `type` backfill, and link validation are regenerated **on the box** on
-the next pass after you push (via `/wake`) — there's no curator in your clone. Leave the
+the next pass after you push (via the scheduled `wake` heartbeat) — there's no curator in your clone. Leave the
 index alone, or regenerate it for a correct local view; the box is authoritative.
 
 ## How the secretary curates (each pass)

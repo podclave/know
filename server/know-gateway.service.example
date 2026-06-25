@@ -3,7 +3,8 @@
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now know-gateway
 #
-# Pair with an external /wake pinger (see examples/github-actions-wake.yml).
+# Schedule the heartbeat (off-box reconcile) hourly via cron, e.g.:
+#   0 * * * * /home/know/know-gateway/.venv/bin/python /home/know/know-gateway/wake.py
 
 [Unit]
 Description=know team brain gateway
@@ -15,7 +16,8 @@ Type=simple
 User=know
 Group=know
 WorkingDirectory=/home/know/know-gateway
-Environment=ANTHROPIC_API_KEY_FILE=/home/know/ANTHROPIC_API_KEY
+# No API key here — the service inherits the box's Claude auth (whatever makes
+# interactive `claude` work for this user: subscription token, API key, or ~/.claude).
 Environment=KNOW_SECRET=replace-with-your-mcp-secret
 Environment=KNOW_NAME=know
 Environment=KNOW_MODEL=claude-haiku-4-5-20251001

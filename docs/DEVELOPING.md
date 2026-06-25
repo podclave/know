@@ -4,8 +4,8 @@ The context to work **on** know. To stand one up or use it, see
 [../README.md](../README.md).
 
 Status: working, verified end-to-end on a real public Sprite (install → connect over
-the public URL → save → event-driven curation → recall; `/wake` heartbeat; idempotent
-re-install).
+the public URL → save → event-driven curation → recall; the scheduled `wake.py`
+heartbeat; idempotent re-install).
 
 ## The pieces
 
@@ -36,10 +36,14 @@ installer). The KB data repo (`~/know-kb` by default) is the truth.
 - **`secretary.py`** — the curator (see safety model below).
 - **`config.py`** — the two reserved bot identities, paths, model-pin resolution, the
   agent recursion-guard env.
-- **`boot_check.py`** — the auth probe, agent-runtime version check (the SDK's *bundled*
-  CLI version), model-resolves check, and cheapest-haiku resolver. Used by the installer's
-  ordered self-check and by `/wake`.
-- **`app.py`** — wires it together; the event-driven secretary trigger and `/wake`.
+- **`boot_check.py`** — the agent-runtime version check (the SDK's *bundled* CLI version),
+  model-resolves check, and cheapest-haiku resolver. Used by the installer's self-check and
+  by the scheduled `wake.py` heartbeat.
+- **`app.py`** — wires it together; the event-driven secretary trigger.
+- **`wake.py`** — the scheduled heartbeat command; run it from cron (off-box) or Podclave
+  Schedule to pull the remote and reconcile human edits pushed between heartbeats.
+- **`nudge.py`** (client) — the `UserPromptSubmit` hook; prompts Claude to propose
+  learnings for you to approve when the session has built up durable facts.
 - **`server/kb-template/CLAUDE.md`** — the methodology seeded into each KB repo. **This
   is the real product surface** — curation quality rides on it, and it's pure
   convention (no code), so it stays editable forever.
@@ -75,7 +79,7 @@ clobber a human edit, delete a fact, or run away across the repo.
     concept that a PRE-EXISTING open contradiction targets, the human has spoken, so the
     record is closed (moved to `contradictions/resolved/`, never rm). A record filed in
     the same pass isn't auto-closed (a pass-start snapshot gates this). Recall flags any
-    open record on the queried concept; `/wake` + the observables report the open count.
+    open record on the queried concept; the observables report the open count.
   - **no blast-radius cap (by design)** — a pass commits whatever it produced; it is
     bounded by the agent's per-pass turn/budget/timeout, not a file-count wall. A hard cap
     that *bailed* a too-large pass would permanently wedge a big backlog (bulk ingest):
@@ -138,10 +142,8 @@ with 9 resolving cross-links, 0 broken; idempotent on re-run.
 - **Feedback loop** → the capture plugin strips injected `<team-brain-context>` blocks
   and `isMeta` entries before distilling, so the brain never re-ingests what it recalled.
   (The plugin runs on the teammate's own machine and still uses their `claude -p`.)
-- **Scope the API key to the service, not the shell** (spec §9.8) — a global
-  `ANTHROPIC_API_KEY` overrides the box owner's interactive subscription and the
-  approval sticks in `~/.claude/.credentials.json`. The installer sets it only on the
-  `sprite-env` service env; the SDK reads it from there.
+- **`know` provisions no credential** — it inherits the box's working Claude auth. Keep
+  the service's environment minimal; do not bake an API key into it.
 - **Pin the model + record the runtime** — the model id lives on one line in the KB
   repo's CLAUDE.md (boot self-check verifies it still resolves, fails loud on
   deprecation); the agent runtime is pinned by the `claude-agent-sdk` version and its
@@ -158,8 +160,8 @@ with 9 resolving cross-links, 0 broken; idempotent on re-run.
   load-bearing; the CC plugin nudges it but web/cowork have no hook, so a cowork-heavy
   team builds a thinner brain unless a power user feeds it.
 - **Reconcile latency = one heartbeat interval** — an off-box remote push isn't seen
-  until the next `/wake`. The immediate fix (a git-host webhook → `/wake`) is intentionally
-  deferred; hard-skip + optimistic concurrency already remove clobber risk.
+  until the next scheduled `wake` run. Hard-skip + optimistic concurrency already remove
+  clobber risk in the interim.
 - **Attribution is self-asserted**, the secret is shared, and the bot/human classifier
   is forgery-resistant not -proof — all fine for a trusted team, all out of the threat
   model. Commit signing is harden-later.
