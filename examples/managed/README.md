@@ -40,7 +40,7 @@ login shell and `claude` can read them.)
   overwriting it.
 
 - `etc/claude-code/managed-settings.d/50-know.json`
-  A **drop-in** settings file: auto-allows the six `know` tools (so recall/save never
+  A **drop-in** settings file: auto-allows the `know` tools (so recall/save/viewer never
   prompt — the curation gate is the in-conversation approval the model already requires)
   and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order,
   and `permissions.allow` **concatenates** with anything else managed, so this coexists

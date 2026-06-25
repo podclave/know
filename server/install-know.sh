@@ -299,7 +299,7 @@ ok "KB repo ready ($KB_REPO)"
 # var, the recall smoke warns clearly and the operator can add it to ENVS themselves.
 # PATH lets the secretary agent subprocess + git resolve under the service's otherwise-
 # minimal environment. The gateway reads KNOW_* from this env.
-ENVS="HOME=$HOME,PATH=$PATH,KNOW_SECRET=$SECRET,KNOW_NAME=$NAME,KNOW_MODEL=$MODEL"
+ENVS="HOME=$HOME,PATH=$PATH,KNOW_SECRET=$SECRET,KNOW_NAME=$NAME,KNOW_MODEL=$MODEL,KNOW_PUBLIC_URL=$SPRITE_URL"
 [ -n "${KNOW_ALERT_WEBHOOK:-}" ] && ENVS="$ENVS,KNOW_ALERT_WEBHOOK=$KNOW_ALERT_WEBHOOK"
 create_service(){
   sprite-env services create "$SERVICE" --cmd "$PYBIN" \

@@ -103,6 +103,12 @@ TOOLS = [
         "correction": _STR("Required for 'replace': the corrected fact text to store"),
         "note": _STR("Optional short note on why/how it was decided")},
        required=["id", "decision"]),
+    _t("viewer",
+       "Return the URL to browse this team brain as an interactive knowledge graph (the "
+       "OKF visualizer) in a web browser. Call this whenever the user asks for the brain's "
+       "viewer / graph / browse / visualizer URL — do NOT guess a URL; this returns the "
+       "real one for this brain.",
+       {}),
 ]
 
 
@@ -131,9 +137,12 @@ def _norm_list(v):
     return []
 
 
-async def call_tool(name: str, args: dict, attribution: str, handlers):
+async def call_tool(name: str, args: dict, attribution: str, handlers, request_base: str = ""):
     """Validate args, dispatch to the injected handler. Raises ToolError on bad
-    args (-> MCP isError), lets handler exceptions bubble (-> visible tool error)."""
+    args (-> MCP isError), lets handler exceptions bubble (-> visible tool error).
+    `request_base` is the scheme://host the client dialed (for tools that build a URL)."""
+    if name == "viewer":
+        return await handlers.viewer(request_base)
     if name == "recall":
         return await handlers.recall(_req_str(args, "query"), attribution)
     if name == "save":
@@ -218,8 +227,13 @@ def build_router(secret: str, handlers) -> APIRouter:
             arguments = params.get("arguments") or {}
             if not isinstance(arguments, dict):
                 return _err(msg_id, -32602, "arguments must be an object")
+            # scheme://host the client actually dialed — lets URL-returning tools (viewer)
+            # work without baked config, and reflect a custom hostname if one is used.
+            host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+            request_base = f"{scheme}://{host}" if host else ""
             try:
-                payload = await call_tool(tname, arguments, attribution, handlers)
+                payload = await call_tool(tname, arguments, attribution, handlers, request_base)
             except ToolError as e:
                 return _rpc(msg_id, result={
                     "isError": True, "content": [{"type": "text", "text": str(e)}]})

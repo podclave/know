@@ -141,7 +141,7 @@ brain auto-enables **per-project** for everyone on clone + trust:
 ```json
 { "extraKnownMarketplaces": { "know": { "source": { "source": "github", "repo": "podclave/know" } } },
   "enabledPlugins": { "know@know": true },
-  "permissions": { "allow": ["mcp__plugin_know_know__recall","mcp__plugin_know_know__list","mcp__plugin_know_know__contradictions"] } }
+  "permissions": { "allow": ["mcp__plugin_know_know__recall","mcp__plugin_know_know__list","mcp__plugin_know_know__contradictions","mcp__plugin_know_know__viewer"] } }
 ```
 
 Reads auto-approve; `save`/`supersede`/`resolve` still prompt. Each teammate sets their own
@@ -169,7 +169,7 @@ The connector URL is fully env-driven, so the admin sets everything in **one pla
 
 1. **`/etc/profile.d/know-identity.sh`** — sets `KNOW_HOST` and `KNOW_SECRET` (your brain's, from the installer card) and bridges the per-user identity **file** `~/.podclave/user-email` into `KNOW_USER` (managed settings expand env vars, not files; missing → `anonymous`). `KNOW_HOST`/`KNOW_SECRET` carry no default — if unset the URL is plainly broken rather than silently wrong.
 2. **`/etc/claude-code/managed-mcp.json`** — the connector, `https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER:-anonymous}/` (one shared file; no `managed-mcp.d/` exists — merge the `know` entry in if the file is already managed).
-3. **`/etc/claude-code/managed-settings.d/50-know.json`** — a drop-in that auto-allows the six `know` tools (recall/save never prompt; the curation gate is the in-conversation approval) and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order and `permissions.allow` concatenates, so it coexists with other managed settings.
+3. **`/etc/claude-code/managed-settings.d/50-know.json`** — a drop-in that auto-allows the `know` tools (recall/save/viewer never prompt; the curation gate is the in-conversation approval) and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order and `permissions.allow` concatenates, so it coexists with other managed settings.
 4. The nudge script ships at `client-plugin/nudge.py`; place a copy in the bundle at `/etc/claude-code/know/nudge.py`.
 
 Placing files in a bundle is manual, so on the brain box run
@@ -192,6 +192,9 @@ graph of the curated knowledge base — nodes are concepts (colored by `type`), 
 the cross-links; click a node to read the fact and follow its links. It's the OKF static
 visualizer rendered on demand from the live bundle; same secret-in-path as the connector
 (treat the URL like a password), no backend, nothing leaves the browser.
+
+Don't have the URL handy? Just ask your Claude *"what's the brain viewer URL?"* — the
+`viewer` tool returns it for your brain (no guessing).
 
 ## Keeping it alive
 

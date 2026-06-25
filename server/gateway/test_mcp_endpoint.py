@@ -21,6 +21,10 @@ class FakeHandlers:
         self.calls.append(("recall", query, attribution))
         return f"recall-result:{query}"
 
+    async def viewer(self, request_base):
+        self.calls.append(("viewer", request_base))
+        return f"viewer-result:{request_base}"
+
     async def save(self, title, body, type, tags, source, attribution):
         self.calls.append(("save", title, body, type, tags, source, attribution))
         return {"status": "saved", "id": "deadbeef"}
@@ -135,7 +139,7 @@ def test_tools_list_is_the_full_surface(harness):
     client, _ = harness
     tools = rpc(client, "tools/list").json()["result"]["tools"]
     assert {t["name"] for t in tools} == {
-        "recall", "save", "list", "supersede", "contradictions", "resolve"}
+        "recall", "save", "list", "supersede", "contradictions", "resolve", "viewer"}
     for t in tools:
         assert t["description"] and t["inputSchema"]["type"] == "object"
 
@@ -155,6 +159,15 @@ def test_recall_dispatches_with_attribution(harness):
     r = call(client, "recall", {"query": "kong"})
     assert h.calls[-1] == ("recall", "kong", NAME)
     assert r.json()["result"]["content"][0]["text"] == "recall-result:kong"
+
+
+def test_viewer_dispatches_with_request_base(harness):
+    client, h = harness
+    r = call(client, "viewer", {})
+    assert h.calls[-1][0] == "viewer"
+    # request_base is derived from the dialed host (TestClient -> http://testserver)
+    assert h.calls[-1][1] == "http://testserver"
+    assert r.json()["result"]["content"][0]["text"] == "viewer-result:http://testserver"
 
 
 def test_save_dispatches_full_args(harness):
