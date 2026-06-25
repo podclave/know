@@ -24,7 +24,7 @@ from mcp_endpoint import build_router
 from recall import recall as recall_agent
 from secretary import contradiction_records, resolve_contradiction, run_pass
 from kb_stats import kb_snapshot
-from store import GitStore, _git
+from store import GitStore
 from viewer.generator import generate_html
 
 

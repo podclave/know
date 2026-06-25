@@ -370,6 +370,12 @@ ok "CLI save+recall smoke passed (tools fire); canary cleaned up"
 
 # --- 11. onboarding card -----------------------------------------------------
 BASE_URL="$SPRITE_URL/mcp/$SECRET"
+# Build the scheduled wake command WITH the env it needs: wake.py reads KNOW_NAME,
+# KNOW_MODEL, and KNOW_ALERT_WEBHOOK from os.environ, but a scheduler (Podclave Schedule
+# or crontab) runs outside the sprite-env service env and won't inherit those values.
+WAKE_CMD="KNOW_NAME='$NAME' KNOW_MODEL='$MODEL'"
+[ -n "${KNOW_ALERT_WEBHOOK:-}" ] && WAKE_CMD="$WAKE_CMD KNOW_ALERT_WEBHOOK='$KNOW_ALERT_WEBHOOK'"
+WAKE_CMD="$WAKE_CMD $PYBIN $GW_DIR/wake.py"
 if [ "$REMOTE_MODE" = remote ]; then
   BACKUP_LINE="Backup + restore: this brain mirrors its KB to
       $REMOTE_URL
@@ -424,12 +430,14 @@ cat <<EOF
   Heartbeat (off-box reconcile): a spun-down box can't cron itself, so schedule this
   command to run hourly — it pulls the mirror remote and reconciles any off-box edits:
 
-      $PYBIN $GW_DIR/wake.py
+      $WAKE_CMD
 
   • Sprite: create a Podclave Schedule (control plane) that runs the command above hourly.
-  • Plain VM: add a crontab line, e.g.  0 * * * * $PYBIN $GW_DIR/wake.py
-  (Only needed if you edit the KB off-box via the mirror remote; with --no-remote it's
-  a no-op. There is no /wake HTTP endpoint anymore.)
+  • Plain VM: add a crontab line, e.g.  0 * * * * $WAKE_CMD
+  (The command carries the env wake.py needs — alert webhook, brain name, pinned model —
+  because the scheduler runs outside the service env. Only needed if you edit the KB
+  off-box via the mirror remote; with --no-remote it's a no-op. There is no /wake
+  HTTP endpoint anymore.)
   -------------------------------------------------------------------
   KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================

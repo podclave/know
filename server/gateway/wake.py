@@ -57,7 +57,8 @@ def wake(repo) -> dict:
                 res = run_pass(repo)
                 status = res.get("status") if isinstance(res, dict) else "unknown"
                 out["reconcile"] = status
-                if status not in ("committed", "noop", "nothing", "clean"):
+                # benign run_pass statuses: committed, noop, skipped (single-flight), deferred (OCC)
+                if status not in ("committed", "noop", "skipped", "deferred"):
                     _alert(f"reconcile failed: {res}")
             else:
                 out["mirror"] = "up to date"
