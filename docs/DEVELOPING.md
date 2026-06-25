@@ -139,9 +139,11 @@ with 9 resolving cross-links, 0 broken; idempotent on re-run.
   `claude` (`setting_sources=None` + the bundled binary, so no user hooks/settings load).
   This is what makes standing a brain up on any host a `pip install`. The recursion-guard
   env (`KNOW_AGENT`) is still set, belt-and-suspenders.
-- **Feedback loop** → the capture plugin strips injected `<team-brain-context>` blocks
-  and `isMeta` entries before distilling, so the brain never re-ingests what it recalled.
-  (The plugin runs on the teammate's own machine and still uses their `claude -p`.)
+- **The nudge never auto-saves** → the client plugin's `UserPromptSubmit` hook
+  (`nudge.py`) only injects a reminder for the live model to PROPOSE durable facts; the
+  user approves before any `save`. It replaces the old background distiller, so there is
+  no transcript re-ingestion path and nothing runs `claude -p` on the teammate's machine.
+  Saves are scrubbed server-side in `store.py` regardless of client.
 - **`know` provisions no credential** — it inherits the box's working Claude auth. Keep
   the service's environment minimal; do not bake an API key into it.
 - **Pin the model + record the runtime** — the model id lives on one line in the KB

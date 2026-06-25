@@ -170,7 +170,9 @@ visualizer rendered on demand from the live bundle; same secret-in-path as the c
 A brain spins down when idle and auto-resumes on first connect. The one event the box
 can't see while idle — an off-box edit pushed to the remote — is handled by the
 **scheduled `wake.py` heartbeat**: run it hourly via Podclave Schedule (on Sprite) or a
-plain crontab entry on a VM. It pulls the remote and reconciles any human edits. There
+plain crontab entry on a VM. A spun-down Sprite cannot run cron itself, so on Sprite the
+heartbeat must be an off-box scheduler like a Podclave Schedule; a local crontab only
+suits an always-on VM. It pulls the remote and reconciles any human edits. There
 is no `/wake` HTTP endpoint; the heartbeat is a direct CLI command.
 
 ## Commit learnings (the nudge)
