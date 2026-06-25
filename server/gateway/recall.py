@@ -58,8 +58,9 @@ async def recall(query: str, repo: Path | None = None, model: str | None = None,
         # Distinct, loud auth message (§5.5) vs a generic agent failure.
         if re.search(r"auth|credential|api[\s_-]?key|401|unauthor|invalid x-api|forbidden",
                      res.error, re.I):
-            raise RuntimeError("brain auth invalid — the ANTHROPIC_API_KEY on the box "
-                               "is missing/revoked/over-quota; recall is down until it's fixed")
+            raise RuntimeError("brain auth invalid — the box's Claude auth is "
+                               "missing/expired/over-quota; recall is down until "
+                               "`claude` works on the box again")
         raise RuntimeError(f"recall agent failed: {res.error[:300]}")
     text = res.text or "(No relevant facts found in the knowledge base.)"
     # §5.5 count signal: a curated hit can still be incomplete if raw >> curated.
