@@ -70,6 +70,9 @@ echo "$rendered" | grep -q 'mcpServers'        && ok "output.sh cats managed-mcp
 echo "$rendered" | grep -q 'mcp__know__recall' && ok "output.sh cats 50-know.json"        || no "output.sh missing settings content"
 echo "$rendered" | grep -q 'KNOW_HOST'         && ok "output.sh cats know-identity.sh"    || no "output.sh missing identity content"
 echo "$rendered" | grep -qF '<know-nudge>'     && ok "output.sh cats nudge.py"            || no "output.sh missing nudge content"
+# every file declares owner + mode for the bundle (all root/0644)
+om="$(echo "$rendered" | grep -c '^# owner: root   mode: 0644$' || true)"
+[ "$om" = 4 ] && ok "output.sh declares owner/mode for all 4 files" || no "expected 4 owner/mode lines, got $om"
 
 # 6. output.sh fills in KNOW_HOST/KNOW_SECRET when passed (no hand-edit needed)
 filled="$(KNOW_HOST=h.example.test KNOW_SECRET=deadbeefcafe bash "$OUT" 2>/dev/null || true)"

@@ -20,7 +20,9 @@ verbatim (no per-deploy placeholders).
 
 ## Files
 
-(Destinations come from `output.sh`; these descriptions are just what each file does.)
+(Destinations, owner, and mode come from `output.sh`; these descriptions are just what
+each file does. All four are owner `root`, mode `0644` — world-readable so every user's
+login shell and `claude` can read them.)
 
 - `etc/profile.d/know-identity.sh`
   The one place env is set. `KNOW_HOST` + `KNOW_SECRET` are admin-filled (no default — if

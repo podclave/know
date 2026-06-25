@@ -23,12 +23,15 @@ if [ -z "$KNOW_HOST" ]; then
   KNOW_HOST="${_url#*://}"; KNOW_HOST="${KNOW_HOST%/}"
 fi
 
-banner() { printf '\n# ===== BUNDLE LOCATION: %s =====\n' "$1"; }
+# banner <bundle-path> <owner> <mode> — names the destination and the ownership/perms to
+# set in the bundle (all overlay files are root-owned + world-readable so every user's
+# login shell + `claude` can read them). Trailing blank line keeps the output readable.
+banner() { printf '\n# ===== BUNDLE LOCATION: %s =====\n# owner: %s   mode: %s\n\n' "$1" "$2" "$3"; }
 exists() { [ -f "$1" ] || { echo "MISSING: $1" >&2; exit 1; }; }
 
 ID="$HERE/etc/profile.d/know-identity.sh"
 exists "$ID"
-banner /etc/profile.d/know-identity.sh
+banner /etc/profile.d/know-identity.sh root 0644
 if [ -n "$KNOW_HOST" ] && [ -n "$KNOW_SECRET" ]; then
   # hex secret + hostname are sed-safe with a '|' delimiter
   sed -e "s|<brain-host>|${KNOW_HOST}|" -e "s|<shared-secret>|${KNOW_SECRET}|" "$ID"
@@ -37,7 +40,7 @@ else
   printf '# (run on the brain box to auto-fill, or pass KNOW_HOST=... KNOW_SECRET=...)\n'
 fi
 
-emit() { exists "$1"; banner "$2"; cat "$1"; }
-emit "$HERE/etc/claude-code/managed-mcp.json"                /etc/claude-code/managed-mcp.json
-emit "$HERE/etc/claude-code/managed-settings.d/50-know.json" /etc/claude-code/managed-settings.d/50-know.json
-emit "$ROOT/client-plugin/nudge.py"                          /etc/claude-code/know/nudge.py
+emit() { exists "$1"; banner "$2" "$3" "$4"; cat "$1"; }
+emit "$HERE/etc/claude-code/managed-mcp.json"                /etc/claude-code/managed-mcp.json                root 0644
+emit "$HERE/etc/claude-code/managed-settings.d/50-know.json" /etc/claude-code/managed-settings.d/50-know.json root 0644
+emit "$ROOT/client-plugin/nudge.py"                          /etc/claude-code/know/nudge.py                   root 0644
