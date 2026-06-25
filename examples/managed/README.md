@@ -20,7 +20,10 @@ Then copy the nudge script (kept single-source in this repo, not duplicated here
 
 - `etc/claude-code/managed-mcp.json` → `/etc/claude-code/managed-mcp.json`
   The per-user connector. Replace `<brain-host>` and `<shared-secret>` with your brain's
-  (the installer's onboarding card prints this file already filled in). **There is no
+  (the installer's onboarding card prints this file already filled in). This overlay assumes
+  every user on the box shares one brain (one team secret); the secret lands in a world-readable
+  `/etc` file — the same shared team secret each user's URL carries anyway, so it is no new
+  exposure, but do not use this overlay to mix multiple teams' secrets on one box. **There is no
   `managed-mcp.d/` drop-in** — if Podclave already manages this file, merge the `know`
   entry into the existing `mcpServers` object instead of overwriting it.
 

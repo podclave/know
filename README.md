@@ -168,7 +168,7 @@ expand environment variables (not files), a tiny `/etc/profile.d` bridge turns i
 `$KNOW_USER`, which the connector URL templates per user:
 
 1. **`/etc/profile.d/know-identity.sh`** — `export KNOW_USER="$(cat "$HOME/.podclave/user-email" 2>/dev/null || echo anonymous)"`
-2. **`/etc/claude-code/managed-mcp.json`** — the connector, `https://<brain-host>/mcp/<secret>/${KNOW_USER:-anonymous}/` (one shared file; no `managed-mcp.d/` exists — merge the `know` entry in if the file is already managed).
+2. **`/etc/claude-code/managed-mcp.json`** — the connector, `https://<brain-host>/mcp/<shared-secret>/${KNOW_USER:-anonymous}/` (one shared file; no `managed-mcp.d/` exists — merge the `know` entry in if the file is already managed).
 3. **`/etc/claude-code/managed-settings.d/50-know.json`** — a drop-in that auto-allows the six `know` tools (recall/save never prompt; the curation gate is the in-conversation approval) and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order and `permissions.allow` concatenates, so it coexists with other managed settings.
 4. Copy the nudge script: `install -D -m 0644 client-plugin/nudge.py /etc/claude-code/know/nudge.py`.
 

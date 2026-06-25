@@ -37,7 +37,7 @@ if python3 - "$SETTINGS" "$EP" <<'PY'
 import json, re, sys
 settings_path, ep_path = sys.argv[1], sys.argv[2]
 allow = set(json.load(open(settings_path)).get("permissions", {}).get("allow", []))
-names = set(re.findall(r'_t\(\s*"([a-z]+)"', open(ep_path).read()))
+names = set(re.findall(r'_t\(\s*"([a-z_]+)"', open(ep_path).read()))
 expected = {f"mcp__know__{n}" for n in names}
 mcp_allow = {a for a in allow if a.startswith("mcp__know__")}
 sys.exit(0 if (expected and mcp_allow == expected) else 1)
