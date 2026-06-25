@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "know": {
+      "type": "http",
+      "url": "https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER:-anonymous}/"
+    }
+  }
+}

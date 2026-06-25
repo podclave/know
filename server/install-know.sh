@@ -439,6 +439,16 @@ cat <<EOF
   off-box via the mirror remote; with --no-remote it's a no-op. There is no /wake
   HTTP endpoint anymore.)
   -------------------------------------------------------------------
+  ORG ADMINS (Podclave): provision EVERY user with zero setup — no plugin, no URL paste.
+  On THIS box (where you ran the installer), in the know repo, run:
+
+      bash examples/managed/output.sh
+
+  It auto-detects this brain's host + secret and prints every file to place in a Podclave
+  org bundle, each under a "# BUNDLE LOCATION: <path>" banner — paste each block into the
+  bundle at that path. (Recall/save then work with no prompt. The secret is the same shared
+  team secret each user's URL carries anyway — treat the bundle accordingly; one brain per box.)
+  -------------------------------------------------------------------
   KB repo: $KB_REPO     model: $MODEL     agent runtime (bundled CLI): $CLAUDE_VER
 =========================================================================
 EOF

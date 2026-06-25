@@ -157,6 +157,34 @@ The same URL works as a custom connector, but claude.ai connectors are **account
 for a same-named local folder than the connector. There's no per-project scoping and no
 plugin. Use Claude Code.
 
+## Org-wide zero-setup provisioning (Podclave / managed settings)
+
+Running an org? Instead of each teammate installing the plugin or pasting a URL, an admin
+can provision **every** user at once with Claude Code **managed settings** — users do
+nothing and `know` is just there on first launch. Drop the overlay's static files into a
+**Podclave org bundle**.
+
+The connector URL is fully env-driven, so the admin sets everything in **one place** —
+`/etc/profile.d/know-identity.sh` — and the JSON files are copied verbatim:
+
+1. **`/etc/profile.d/know-identity.sh`** — sets `KNOW_HOST` and `KNOW_SECRET` (your brain's, from the installer card) and bridges the per-user identity **file** `~/.podclave/user-email` into `KNOW_USER` (managed settings expand env vars, not files; missing → `anonymous`). `KNOW_HOST`/`KNOW_SECRET` carry no default — if unset the URL is plainly broken rather than silently wrong.
+2. **`/etc/claude-code/managed-mcp.json`** — the connector, `https://${KNOW_HOST}/mcp/${KNOW_SECRET}/${KNOW_USER:-anonymous}/` (one shared file; no `managed-mcp.d/` exists — merge the `know` entry in if the file is already managed).
+3. **`/etc/claude-code/managed-settings.d/50-know.json`** — a drop-in that auto-allows the six `know` tools (recall/save never prompt; the curation gate is the in-conversation approval) and arms the commit-nudge `UserPromptSubmit` hook. Drop-in files merge in lexical order and `permissions.allow` concatenates, so it coexists with other managed settings.
+4. The nudge script ships at `client-plugin/nudge.py`; place a copy in the bundle at `/etc/claude-code/know/nudge.py`.
+
+Placing files in a bundle is manual, so on the brain box run
+[`examples/managed/output.sh`](examples/managed/): it auto-detects this brain's host +
+secret (from `~/.know/secret` and `sprite-env info`) and prints every file above under a
+`# BUNDLE LOCATION: <path>` banner — paste each block into the bundle at the path shown,
+with `know-identity.sh` already filled in. This is an alternative to the
+per-user plugin / bare-connector paths above, not a replacement. The `/know:*` slash
+commands are not provisioned this way (they need the plugin); the nudge + natural language
+already drive recall/save/commit.
+
+Two things to verify on a test box: that the `claude` session inherits the `profile.d`
+env (else the URL falls back to `…/anonymous/` — set the vars wherever Podclave sources
+session env), and the managed-file paths against your installed Claude Code version.
+
 ## Browse the brain (OKF visualizer)
 
 Open `https://<brain-host>/viewer/<secret>/` in a browser for an interactive
