@@ -1,7 +1,7 @@
 """Transport tests for the secret-path MCP endpoint. Handlers are faked, so these
 run with no git and no claude — they exercise only the JSON-RPC / secret-path layer.
-Adapted from podbrain's test_mcp_endpoint.py (swap bearer-auth for secret-path,
-swap the engine tool table for recall/save/list/supersede)."""
+Auth is the secret path (not a bearer header) and the tool table is
+recall/save/list/supersede."""
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

@@ -13,7 +13,7 @@ All server code is `server/gateway/` (FastAPI, deployed to `~/know-gateway` by t
 installer). The KB data repo (`~/know-kb` by default) is the truth.
 
 - **`mcp_endpoint.py`** — the MCP-over-HTTP transport, mounted at the secret path
-  `/mcp/<secret>/<name>/`. Lifted from podbrain's `build_router` (JSON-RPC /
+  `/mcp/<secret>/<name>/`. A `build_router` (JSON-RPC /
   Streamable-HTTP: initialize/ping/tools/list/tools/call, notification→202, error
   codes, `isError` wrapping). Two changes: auth is `hmac.compare_digest` on the
   `<secret>` path segment (wrong secret → plain 404, never a 401/`WWW-Authenticate`
@@ -126,7 +126,7 @@ invariant:**
 Verified live: a real curation pass over 5 relatable facts produced 5 conformant concepts
 with 9 resolving cross-links, 0 broken; idempotent on re-run.
 
-## Lessons carried over from podbrain (pre-empted, not rediscovered)
+## Lessons baked in from the start (pre-empted, not rediscovered)
 
 - **A down brain must be a VISIBLE tool error**, never silent success. The MCP layer
   wraps any handler exception as an `isError` tool result the model sees ("know call

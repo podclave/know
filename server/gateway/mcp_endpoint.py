@@ -1,8 +1,8 @@
 """MCP-over-HTTP endpoint (stateless Streamable HTTP) for the know brain.
 
-Lifted from podbrain's gateway/mcp_endpoint.py — the JSON-RPC / Streamable-HTTP
-layer (initialize / ping / tools/list / tools/call, notification->202, error
-codes, isError wrapping, _tool_result). Two deliberate changes for v4:
+The JSON-RPC / Streamable-HTTP layer (initialize / ping / tools/list /
+tools/call, notification->202, error codes, isError wrapping, _tool_result).
+Two deliberate choices for v4:
 
   1. AUTH IS A SECRET PATH SEGMENT, not a bearer header. The server is a no-auth
      MCP server reachable at /mcp/<secret>/<name>/ (spec §9): every connector

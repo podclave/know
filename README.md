@@ -12,9 +12,8 @@ connector + `/know:` commands + an opt-out nudge to commit learnings you approve
 URL. claude.ai / Desktop / Cowork can connect to the same URL, but there a connector is
 account-global and needs manual settings — prefer Claude Code (see Connect below).
 
-> Standalone and open-source-able (its own repo). Inspired by — and lifting ~⅔ of its
-> server scaffolding from — [podbrain](https://github.com/podclave/podbrain), but with
-> a different engine: no vector DB, just git + markdown + a cheap `claude` agent.
+> Standalone and open-source-able (its own repo). A lean engine: no vector DB, just
+> git + markdown + a cheap `claude` agent.
 
 ## How it works
 

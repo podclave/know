@@ -109,7 +109,7 @@ app.include_router(build_router(config.SECRET, Handlers(KB_REPO)))
 # --- event-driven secretary trigger (spec §10) -------------------------------
 # Debounced single-flight: a save sets writes>0; a background task fires a curation
 # pass after a short quiet window, at most once per MIN_SECS, holding a Sprite
-# keep-alive so the box can't suspend mid-pass. Lifted from podbrain app.py note_writes.
+# keep-alive so the box can't suspend mid-pass.
 CURATE = {"writes": 0, "last_run": 0.0, "scheduled": False}
 CURATE_MIN_SECS = 300       # min seconds between event-driven (on-box) curation passes
 CURATE_DEBOUNCE = 20        # quiet window after a save before a curation pass fires

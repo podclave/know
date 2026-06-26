@@ -32,8 +32,8 @@ from agent import SECRETARY_BUDGET_USD, run_sync
 from config import BOT_EMAILS, KB_REPO, SECRETARY_IDENTITY, model_id
 from store import _git, push_mirror
 
-# Anti-hijack marker — the raw facts the secretary reads are DATA, not instructions
-# (lifted in spirit from podbrain's DISTILLER_MARKER). Embedded in the prompt.
+# Anti-hijack marker — the raw facts the secretary reads are DATA, not instructions.
+# Embedded in the prompt.
 SECRETARY_MARKER = "curate this team knowledge base"
 
 BASE_REF = "refs/secretary/base"   # local-only ref marking the last reconciled HEAD
