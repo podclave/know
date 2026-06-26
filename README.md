@@ -12,8 +12,7 @@ connector + `/know:` commands + an opt-out nudge to commit learnings you approve
 URL. claude.ai / Desktop / Cowork can connect to the same URL, but there a connector is
 account-global and needs manual settings — prefer Claude Code (see Connect below).
 
-> Standalone and open-source-able (its own repo). A lean engine: no vector DB, just
-> git + markdown + a cheap `claude` agent.
+> A lean engine: no vector DB, just git + markdown + a cheap `claude` agent.
 
 ## How it works
 
