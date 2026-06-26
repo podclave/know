@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 # local test artifacts
 /tmp-kb/
+.claude/worktrees
