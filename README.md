@@ -18,23 +18,7 @@ account-global and needs manual settings — prefer Claude Code (see Connect bel
 
 ## How it works
 
-```
-   scheduled wake (hourly) ──run──▶  wake.py  (pull mirror · reconcile off-box edits)
-                                          │
-   ┌──────────────────────────────────────▼─────────────────────────────┐
-   │  BRAIN — one Sprite, a supervised FastAPI MCP-over-HTTP service       │
-   │   • git repo of markdown facts = the truth  → optional remote backup │
-   │   • recall   — a cheap `claude` agent greps/reads the repo            │
-   │   • save/list/supersede — write tools, scrubbed + committed to git     │
-   │   • secretary — a `claude` that promotes raw→curated, dedupes, queues  │
-   │                 contradictions, regenerates INDEX (human edits win)    │
-   └──────────────────────────────┬───────────────────────────────────────┘
-                MCP over HTTP, no auth header — a SECRET in the URL PATH:
-                       https://<brain-host>/mcp/<secret>/<name>/
-        ┌────────────────────┬──────────────┴───────┬─────────────────────┐
-   Claude Code          claude.ai              Desktop                 Cowork
-   (add the URL)        (add the URL)          (add the URL)           (add the URL)
-```
+![know architecture](./know-architecture.svg)
 
 - **Auth = a secret in the URL path** (the capability-URL pattern, like a Slack
   webhook). MCP auth is optional and every connector surface accepts a no-auth URL —

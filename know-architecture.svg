@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">know architecture: a shared team brain backed by git and markdown</title>
+  <desc id="desc">A green and white architecture diagram for podclave know, showing an hourly wake job feeding a brain service, git-backed knowledge operations, capability URLs, a browser viewer, and Claude client surfaces.</desc>
+  <defs>
+    <linearGradient id="pageGradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f7fff9"/>
+      <stop offset="0.52" stop-color="#eefaf2"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="brainGradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#effbf4"/>
+    </linearGradient>
+    <filter id="softShadow" x="-12%" y="-14%" width="124%" height="128%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#0a3f2a" flood-opacity="0.13"/>
+    </filter>
+    <filter id="tinyShadow" x="-18%" y="-24%" width="136%" height="148%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0a3f2a" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#168656"/>
+    </marker>
+    <marker id="arrowDark" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#28483c"/>
+    </marker>
+    <style>
+      .bg { fill: url(#pageGradient); }
+      .ink { fill: #14362d; }
+      .muted { fill: #557267; }
+      .green { fill: #118452; }
+      .line { stroke: #168656; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+      .line-muted { stroke: #9ccfb5; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .connector { stroke: #28483c; stroke-width: 2.6; fill: none; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrowDark); }
+      .card { fill: #ffffff; stroke: #c9ead7; stroke-width: 2; }
+      .panel { fill: #f7fff9; stroke: #d7f0df; stroke-width: 1.5; }
+      .code { font-family: "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace; }
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+      .label { font-size: 14px; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
+      .small { font-size: 14px; }
+      .body { font-size: 16px; }
+      .body-bold { font-size: 16px; font-weight: 700; }
+      .title { font-size: 34px; font-weight: 800; letter-spacing: 0; }
+      .subtitle { font-size: 17px; }
+      .mono { font-size: 15px; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="900" rx="28"/>
+
+  <g transform="translate(66 48)">
+    <text class="label green" x="0" y="0">podclave / know</text>
+    <text class="title ink" x="0" y="42">A git-backed team brain for Claude</text>
+    <text class="subtitle muted" x="0" y="73">One supervised MCP-over-HTTP service, one capability URL, one durable markdown knowledge base.</text>
+  </g>
+
+  <g transform="translate(894 40)">
+    <rect x="0" y="0" width="236" height="72" rx="20" fill="#e9f9ef" stroke="#bde6ce"/>
+    <circle cx="38" cy="36" r="16" fill="#ffffff" stroke="#8bd3a9" stroke-width="2"/>
+    <path d="M38 25v12l8 5" fill="none" stroke="#118452" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="body-bold ink" x="66" y="31">hourly wake</text>
+    <text class="small muted" x="66" y="53">Podclave Schedule or cron</text>
+  </g>
+
+  <path class="line" d="M1012 116 C1012 146 930 153 930 186"/>
+
+  <g transform="translate(808 162)" filter="url(#tinyShadow)">
+    <rect class="card" x="0" y="0" width="246" height="78" rx="18"/>
+    <text class="body-bold ink" x="28" y="33">wake.py</text>
+    <text class="small muted" x="28" y="56">pull mirror · reconcile edits</text>
+  </g>
+
+  <path class="line" d="M930 242 V290"/>
+
+  <g transform="translate(70 284)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="1060" height="330" rx="28" fill="url(#brainGradient)" stroke="#91d7ad" stroke-width="2.5"/>
+
+    <g opacity="0.19" transform="translate(804 34)">
+      <path d="M78 11c30-3 57 14 65 42 20 3 37 19 40 40 4 28-13 52-40 59-3 27-25 48-53 49-17 1-33-5-45-16-13 12-31 19-51 16-29-5-50-30-48-60-23-10-37-36-31-62 5-23 24-40 46-43 12-17 31-27 57-25z" fill="#118452"/>
+      <path d="M51 64 L89 49 L132 72 L111 116 L148 147 M89 49 L92 106 L49 129 M92 106 L131 127 M51 64 L33 96 L49 129" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      <g fill="#ffffff">
+        <circle cx="51" cy="64" r="10"/>
+        <circle cx="89" cy="49" r="10"/>
+        <circle cx="132" cy="72" r="10"/>
+        <circle cx="92" cy="106" r="10"/>
+        <circle cx="33" cy="96" r="10"/>
+        <circle cx="49" cy="129" r="10"/>
+        <circle cx="131" cy="127" r="10"/>
+        <circle cx="148" cy="147" r="10"/>
+      </g>
+    </g>
+
+    <g transform="translate(36 32)">
+      <rect x="0" y="0" width="116" height="36" rx="18" fill="#dff6e8"/>
+      <text class="label green" x="24" y="24">BRAIN</text>
+      <text class="title ink" x="0" y="80">one Sprite, supervised FastAPI MCP service</text>
+      <text class="subtitle muted" x="0" y="109">The server wraps a markdown knowledge repo with read, write, curation, and viewer tools.</text>
+    </g>
+
+    <g transform="translate(36 156)">
+      <rect class="panel" x="0" y="0" width="236" height="132" rx="18"/>
+      <circle cx="32" cy="33" r="14" fill="#fff6d8" stroke="#e4c45f"/>
+      <path d="M27 33h10M32 28v10" stroke="#9a7615" stroke-width="2.2" stroke-linecap="round"/>
+      <text class="body-bold ink" x="58" y="38">Git is truth</text>
+      <text class="small muted" x="24" y="72">one-fact-per-file markdown</text>
+      <text class="small muted" x="24" y="95">curated OKF bundle + index</text>
+      <text class="small muted" x="24" y="118">optional remote backup</text>
+    </g>
+
+    <g transform="translate(298 156)">
+      <rect class="panel" x="0" y="0" width="236" height="132" rx="18"/>
+      <circle cx="32" cy="33" r="14" fill="#e7f2ff" stroke="#9dc8f2"/>
+      <path d="M25 34c8-9 21-9 29 0-8 9-21 9-29 0z" fill="none" stroke="#2d6fa5" stroke-width="2"/>
+      <circle cx="40" cy="34" r="3" fill="#2d6fa5"/>
+      <text class="body-bold ink" x="58" y="38">Reads</text>
+      <text class="small muted" x="24" y="72">recall via cheap claude agent</text>
+      <text class="small muted" x="24" y="95">list + contradictions</text>
+      <text class="small muted" x="24" y="118">viewer returns graph URL</text>
+    </g>
+
+    <g transform="translate(560 156)">
+      <rect class="panel" x="0" y="0" width="236" height="132" rx="18"/>
+      <circle cx="32" cy="33" r="14" fill="#e7f9ef" stroke="#8bd3a9"/>
+      <path d="M26 38l8 8 17-23" fill="none" stroke="#118452" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="body-bold ink" x="58" y="38">Writes</text>
+      <text class="small muted" x="24" y="72">save · supersede · resolve</text>
+      <text class="small muted" x="24" y="95">scrubbed before storage</text>
+      <text class="small muted" x="24" y="118">committed and pushed by git</text>
+    </g>
+
+    <g transform="translate(822 156)">
+      <rect class="panel" x="0" y="0" width="202" height="132" rx="18"/>
+      <circle cx="32" cy="33" r="14" fill="#f1eaff" stroke="#c9b8ef"/>
+      <path d="M25 35c9-14 23-14 32 0M28 43c8 7 19 7 27 0" fill="none" stroke="#7254a5" stroke-width="2.2" stroke-linecap="round"/>
+      <text class="body-bold ink" x="58" y="38">Secretary</text>
+      <text class="small muted" x="24" y="72">raw to curated</text>
+      <text class="small muted" x="24" y="95">dedupe + queue conflicts</text>
+      <text class="small muted" x="24" y="118">human edits win</text>
+    </g>
+  </g>
+
+  <path class="connector" d="M600 616 V650"/>
+
+  <g transform="translate(154 650)">
+    <rect x="0" y="0" width="432" height="112" rx="20" fill="#ffffff" stroke="#bde6ce" stroke-width="2" filter="url(#tinyShadow)"/>
+    <rect x="24" y="22" width="132" height="26" rx="13" fill="#dff6e8"/>
+    <text class="label green" x="42" y="41">MCP URL</text>
+    <text class="body-bold ink" x="24" y="73">SECRET in the URL path</text>
+    <text class="mono code muted" x="24" y="98">https://&lt;brain-host&gt;/mcp/&lt;secret&gt;/&lt;name&gt;/</text>
+  </g>
+
+  <g transform="translate(614 650)">
+    <rect x="0" y="0" width="432" height="112" rx="20" fill="#ffffff" stroke="#bde6ce" stroke-width="2" filter="url(#tinyShadow)"/>
+    <rect x="24" y="22" width="154" height="26" rx="13" fill="#dff6e8"/>
+    <text class="label green" x="42" y="41">Graph viewer</text>
+    <text class="body-bold ink" x="24" y="73">Browse the curated OKF brain</text>
+    <text class="mono code muted" x="24" y="98">https://&lt;brain-host&gt;/viewer/&lt;secret&gt;/</text>
+  </g>
+
+  <path class="line-muted" d="M370 762 V792"/>
+  <path class="line-muted" d="M830 762 V792"/>
+  <path class="line-muted" d="M370 792 H830"/>
+  <path class="line-muted" d="M370 792 V812"/>
+  <path class="line-muted" d="M524 792 V812"/>
+  <path class="line-muted" d="M676 792 V812"/>
+  <path class="line-muted" d="M830 792 V812"/>
+
+  <g transform="translate(106 792)">
+    <rect x="0" y="20" width="246" height="64" rx="18" fill="#0f7c4e" stroke="#0f7c4e" filter="url(#tinyShadow)"/>
+    <text class="body-bold" fill="#ffffff" x="22" y="49">Claude Code</text>
+    <text class="small" fill="#ddf8e8" x="22" y="72">plugin · /know: cmds · nudge</text>
+  </g>
+
+  <g transform="translate(384 792)">
+    <rect x="0" y="20" width="174" height="64" rx="18" fill="#ffffff" stroke="#c9ead7" stroke-width="2"/>
+    <text class="body-bold ink" x="24" y="49">claude.ai</text>
+    <text class="small muted" x="24" y="72">add the URL</text>
+  </g>
+
+  <g transform="translate(590 792)">
+    <rect x="0" y="20" width="174" height="64" rx="18" fill="#ffffff" stroke="#c9ead7" stroke-width="2"/>
+    <text class="body-bold ink" x="24" y="49">Desktop</text>
+    <text class="small muted" x="24" y="72">add the URL</text>
+  </g>
+
+  <g transform="translate(796 792)">
+    <rect x="0" y="20" width="174" height="64" rx="18" fill="#ffffff" stroke="#c9ead7" stroke-width="2"/>
+    <text class="body-bold ink" x="24" y="49">Cowork</text>
+    <text class="small muted" x="24" y="72">add the URL</text>
+  </g>
+</svg>
