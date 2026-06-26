@@ -9,7 +9,7 @@
 Standing up a `know` brain produces good per-user connect instructions, but every
 teammate still has to install the plugin (or add the connector) and paste their personal
 URL. A Podclave **org admin** can place static files on the org's managed Claude Code
-boxes (e.g. under `/etc/claude-code/…` and `/etc/profile.d/…`), which is the better lever
+boxes (e.g. under `/etc/claude-code/…` and a home `.env.podclave.*`), which is the better lever
 than asking each user to configure their own client. The install flow never tells the
 admin this — there's no "here's the overlay that provisions every user with zero setup"
 version of the guidance.
@@ -73,7 +73,11 @@ this brain's `KNOW_HOST`/`KNOW_SECRET` values to paste into the one env file.
 
 ## Components
 
-### 1. Identity bridge — `/etc/profile.d/know-identity.sh`
+### 1. Identity bridge — `.env.podclave.know` (home dotfile, owner `sprite`)
+
+`/etc/profile.d/` is **not sourced on Sprites**. Podclave instead sources
+`.env.podclave.*` in every shell automatically, so the env bridge is the home dotfile
+`.env.podclave.know` (owned by the box user, `sprite`):
 
 ```sh
 # The ONE place the admin sets the overlay's env. managed-mcp.json expands all three.
@@ -103,7 +107,7 @@ three here means the admin edits **one file**; the JSON templates are copied ver
 ```
 
 Per-user attribution with no plugin, no typing, no keychain — and **no per-deploy
-placeholders**: the URL is fully env-driven from `know-identity.sh`, so this file is copied
+placeholders**: the URL is fully env-driven from `.env.podclave.know`, so this file is copied
 verbatim. The shared secret in `/etc` is acceptable — it is the same team secret every
 user's connector URL would carry anyway; it grants no more than the per-user URLs already
 do (one brain per box). An email as
@@ -161,17 +165,18 @@ install host, and there's no reliable cross-host copy), so the overlay does NOT 
 per-file `# BUNDLE LOCATION` comments (and JSON can't carry comments anyway). Instead
 `output.sh` cats every file the admin needs — the three overlay templates **and**
 `client-plugin/nudge.py` — each under a banner naming its destination **and the owner +
-mode to set in the bundle** (`# BUNDLE LOCATION: <path>` then `# owner: root   mode: 0644`,
-then a blank line). All four are owner `root`, mode `0644` (world-readable so every user's
-login shell + `claude` can read them — the Podclave bundle UI sets ownership/perms per
-file). The admin runs it and pastes each block into the bundle at the path shown. The
+mode to set in the bundle** (`# BUNDLE LOCATION: <path>` then `# owner: <owner>   mode: 0644`,
+then a blank line). The three `/etc` files are owner `root`, mode `0644` (world-readable so
+every user's `claude` can read them); `.env.podclave.know` is owner `sprite`, mode `0644`
+(the box user's home dotfile). The Podclave bundle UI sets ownership/perms per file. The
+admin runs it and pastes each block into the bundle at the path shown. The
 README and installer card do not duplicate placement; they point at `output.sh`.
 
 `output.sh` also **fills in the values automatically**. Run on the brain box (where the
 installer ran), it self-discovers this brain's host + secret exactly where the installer
 stored them — the secret from `~/.know/secret` and the host from `sprite-env info` — and
 substitutes them for the `<brain-host>`/`<shared-secret>` placeholders in the emitted
-`know-identity.sh`. No args, no hand-edit. Env vars `KNOW_HOST`/`KNOW_SECRET` override (for
+`.env.podclave.know`. No args, no hand-edit. Env vars `KNOW_HOST`/`KNOW_SECRET` override (for
 running off-box); with neither available it emits the placeholder template. (`KNOW_USER` is
 always the per-user runtime expression; the JSON files are emitted verbatim.)
 
@@ -180,7 +185,7 @@ always the per-user runtime expression; the JSON files are emitted verbatim.)
 1. **`examples/managed/` (repo)** — the overlay templates + the placement lister:
    - `etc/claude-code/managed-mcp.json` (env-driven URL — no placeholders; copied verbatim)
    - `etc/claude-code/managed-settings.d/50-know.json` (the permissions + hook block above)
-   - `etc/profile.d/know-identity.sh` (the one place env is set: `KNOW_HOST`/`KNOW_SECRET`/`KNOW_USER`)
+   - `env.podclave.know` → placed at `.env.podclave.know` (the one place env is set: `KNOW_HOST`/`KNOW_SECRET`/`KNOW_USER`; Podclave auto-sources `.env.podclave.*`)
    - `output.sh` (the **single source of placement**: cats each of the above + `client-plugin/nudge.py`
      under a `# BUNDLE LOCATION: <path>` banner for manual paste into the bundle)
    - `README.md` — what each file does (no per-file destinations — those come from `output.sh`),
@@ -190,8 +195,8 @@ always the per-user runtime expression; the JSON files are emitted verbatim.)
 2. **Top-level `README.md` section** — "Org-wide zero-setup provisioning (Podclave /
    managed settings)": explains the model (admin drops files into a Podclave org bundle;
    users do nothing), the one-file env model, the placed files + the nudge copy, the
-   reads-and-writes auto-allow rationale, and the two documented assumptions (profile.d env
-   inheritance; exact managed paths per CC version). Cross-links `examples/managed/`.
+   reads-and-writes auto-allow rationale, and the documented assumption (managed paths per
+   CC version). Cross-links `examples/managed/`.
    Positioned as an alternative to the per-user plugin / bare-connector paths, not a replacement.
 
 3. **Installer onboarding-card block (`server/install-know.sh`)** — a new **"Org admin
@@ -207,7 +212,7 @@ always the per-user runtime expression; the JSON files are emitted verbatim.)
 Admin (once, on the brain box, into a Podclave org bundle):
   bash examples/managed/output.sh   → auto-detects host (sprite-env info) + secret
                                        (~/.know/secret); prints each file under
-                                       "# BUNDLE LOCATION: <path>", know-identity.sh filled in;
+                                       "# BUNDLE LOCATION: <path>", .env.podclave.know filled in;
                                        paste each block into the bundle at that path
 
 End user (zero action):
@@ -225,7 +230,7 @@ logic. Verification:
 
 - **Template validity:** the committed `examples/managed/etc/claude-code/managed-mcp.json`
   and `examples/managed/etc/claude-code/managed-settings.d/50-know.json` parse as JSON
-  (e.g. `python3 -m json.tool`), and `examples/managed/etc/profile.d/know-identity.sh`
+  (e.g. `python3 -m json.tool`), and `examples/managed/env.podclave.know`
   passes `bash -n`. Add a standalone check (or a step in the install regression) that
   every committed `examples/managed/**/*.json` is valid JSON and the `.sh` is syntactically
   valid.
@@ -242,11 +247,11 @@ logic. Verification:
 
 ## Assumptions / risks (documented, not blocking)
 
-- **profile.d env inheritance:** depends on how Podclave launches `claude`. If the session
-  does not inherit the login/interactive shell env, `$KNOW_USER` is unset and the URL
-  falls back to `…/anonymous/`. Mitigation: the `:-anonymous` fallback (graceful, not
-  broken); the docs tell the admin to verify and, if needed, set `KNOW_USER` wherever
-  Podclave sources session env.
+- **Env sourcing:** the bridge relies on Podclave sourcing `.env.podclave.*` in every
+  shell automatically (the documented mechanism; `/etc/profile.d` is NOT sourced on
+  Sprites). If for some reason it isn't sourced, `$KNOW_HOST`/`$KNOW_SECRET`/`$KNOW_USER`
+  are unset and the URL is plainly broken — visible, not silently wrong. The docs tell the
+  admin to verify on a test box.
 - **Managed file paths/filenames** (`managed-mcp.json`, `managed-settings.d/`) match the
   current docs and the 2.1.191 binary strings; verify against the installed CC version
   before publishing.

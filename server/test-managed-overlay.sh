@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Validates the org-overlay example templates under examples/managed/:
 #   - every *.json parses
-#   - the profile.d bridge is valid shell
+#   - the env-bridge file (.env.podclave.know) is valid shell
 #   - permissions.allow exactly matches the gateway's tool surface (mcp__know__*)
 #   - no second copy of nudge.py is committed (single source = client-plugin/nudge.py)
 # No services, no network.  Run:  bash server/test-managed-overlay.sh
@@ -23,11 +23,11 @@ while IFS= read -r f; do
 done < <(find "$MGD" -name '*.json')
 [ "$found_json" = 1 ] && ok "found overlay JSON templates" || no "no JSON templates under examples/managed"
 
-# 2. profile.d bridge is valid shell and sets all three env vars in one place
-SH="$MGD/etc/profile.d/know-identity.sh"
-if [ -f "$SH" ] && bash -n "$SH" 2>/dev/null; then ok "know-identity.sh syntax ok"; else no "know-identity.sh missing or bad syntax"; fi
+# 2. env-bridge file is valid shell and sets all three env vars in one place
+SH="$MGD/env.podclave.know"
+if [ -f "$SH" ] && bash -n "$SH" 2>/dev/null; then ok "env.podclave.know syntax ok"; else no "env.podclave.know missing or bad syntax"; fi
 for v in KNOW_HOST KNOW_SECRET KNOW_USER; do
-  grep -qE "^export $v=" "$SH" 2>/dev/null && ok "know-identity.sh exports $v" || no "know-identity.sh does not export $v"
+  grep -qE "^export $v=" "$SH" 2>/dev/null && ok "env.podclave.know exports $v" || no "env.podclave.know does not export $v"
 done
 
 # 2b. the connector URL is env-driven (no <placeholders> left to hand-edit per deploy)
@@ -60,7 +60,7 @@ OUT="$MGD/output.sh"
 if [ -f "$OUT" ] && bash -n "$OUT" 2>/dev/null; then ok "output.sh syntax ok"; else no "output.sh missing or bad syntax"; fi
 rendered="$(bash "$OUT" 2>/dev/null || true)"
 for loc in \
-  "/etc/profile.d/know-identity.sh" \
+  ".env.podclave.know" \
   "/etc/claude-code/managed-mcp.json" \
   "/etc/claude-code/managed-settings.d/50-know.json" \
   "/etc/claude-code/know/nudge.py"; do
@@ -68,11 +68,15 @@ for loc in \
 done
 echo "$rendered" | grep -q 'mcpServers'        && ok "output.sh cats managed-mcp.json"   || no "output.sh missing managed-mcp content"
 echo "$rendered" | grep -q 'mcp__know__recall' && ok "output.sh cats 50-know.json"        || no "output.sh missing settings content"
-echo "$rendered" | grep -q 'KNOW_HOST'         && ok "output.sh cats know-identity.sh"    || no "output.sh missing identity content"
+echo "$rendered" | grep -q 'KNOW_HOST'         && ok "output.sh cats env.podclave.know"   || no "output.sh missing env-bridge content"
 echo "$rendered" | grep -qF '<know-nudge>'     && ok "output.sh cats nudge.py"            || no "output.sh missing nudge content"
-# every file declares owner + mode for the bundle (all root/0644)
-om="$(echo "$rendered" | grep -c '^# owner: root   mode: 0644$' || true)"
-[ "$om" = 4 ] && ok "output.sh declares owner/mode for all 4 files" || no "expected 4 owner/mode lines, got $om"
+# every file declares owner + mode: the three /etc files are root, .env.podclave.know is sprite
+total_om="$(echo "$rendered" | grep -c '^# owner: .*   mode: 0644$' || true)"
+root_om="$(echo "$rendered"  | grep -c '^# owner: root   mode: 0644$' || true)"
+[ "$total_om" = 4 ] && ok "output.sh declares owner/mode for all 4 files" || no "expected 4 owner/mode lines, got $total_om"
+[ "$root_om" = 3 ]  && ok "the 3 /etc files are owner root"               || no "expected 3 root-owned files, got $root_om"
+echo "$rendered" | grep -A1 -F "BUNDLE LOCATION: .env.podclave.know =====" | grep -q '^# owner: sprite' \
+  && ok ".env.podclave.know is owner sprite" || no ".env.podclave.know is not owner sprite"
 
 # 6. output.sh fills in KNOW_HOST/KNOW_SECRET when passed (no hand-edit needed)
 filled="$(KNOW_HOST=h.example.test KNOW_SECRET=deadbeefcafe bash "$OUT" 2>/dev/null || true)"
