@@ -41,6 +41,18 @@ class Handlers:
     async def recall(self, query: str, attribution: str) -> str:
         return await recall_agent(query, repo=self.repo)
 
+    async def viewer(self, request_base: str) -> str:
+        """The OKF visualizer URL for this brain: <base>/viewer/<secret>/. Base is the
+        installer-set public URL, else the scheme://host the client dialed."""
+        base = config.PUBLIC_URL or (request_base or "").rstrip("/")
+        if not base:
+            return ("The viewer URL is <brain-host>/viewer/<secret>/ — but this brain's "
+                    "public URL isn't configured, so I can't fill it in. Set KNOW_PUBLIC_URL "
+                    "on the service (re-run the installer) and ask again.")
+        return (f"Browse this brain's knowledge graph (the OKF visualizer) at:\n"
+                f"{base}/viewer/{config.SECRET}/\n"
+                "Open it in a browser. Treat the URL like a password — it carries the team secret.")
+
     async def save(self, title, body, type, tags, source, attribution) -> str:
         r = await asyncio.to_thread(self.store.save, title, body, type, tags, source, attribution)
         note_write()  # tail-of-write curation trigger (§10 lifecycle)

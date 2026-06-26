@@ -133,7 +133,7 @@ not load-bearing.
 {
   "permissions": {
     "allow": [
-      "mcp__know__recall", "mcp__know__list", "mcp__know__contradictions",
+      "mcp__know__recall", "mcp__know__list", "mcp__know__contradictions", "mcp__know__viewer",
       "mcp__know__save", "mcp__know__supersede", "mcp__know__resolve"
     ]
   },
@@ -145,7 +145,7 @@ not load-bearing.
 }
 ```
 
-- **All six tools auto-approved**, including writes. This is safe because the `save` tool
+- **All `know` tools auto-approved**, including writes. This is safe because the `save` tool
   description requires explicit in-conversation user approval before the model calls it
   (the model never self-initiates a save), so the in-conversation approval IS the curation
   gate; a second Claude Code permission prompt would be pure redundant friction.
@@ -234,9 +234,9 @@ logic. Verification:
   passes `bash -n`. Add a standalone check (or a step in the install regression) that
   every committed `examples/managed/**/*.json` is valid JSON and the `.sh` is syntactically
   valid.
-- **Tool-name consistency:** the `permissions.allow` entries are exactly the six
+- **Tool-name consistency:** the `permissions.allow` entries are exactly the
   `mcp__know__*` names matching the gateway's tool surface
-  (`recall/save/list/supersede/contradictions/resolve`) — assert this against
+  (`recall/save/list/supersede/contradictions/resolve/viewer`) — assert this against
   `server/gateway/mcp_endpoint.py`'s `TOOLS` so the list can't silently drift.
 - **Installer card:** `bash -n server/install-know.sh` stays clean; the existing
   `test-install-know.sh` stays green (the card block is print-only, downstream of the

@@ -25,6 +25,11 @@ SECRET = os.environ.get("KNOW_SECRET", "").strip()
 # Human-readable brain name (set by the installer's --name; shown in healthz/wake/viewer).
 NAME = os.environ.get("KNOW_NAME", "know").strip() or "know"
 
+# The brain's public base URL (scheme://host, no path), set by the installer (= the Sprite's
+# public URL). Used to build the viewer URL the `viewer` tool returns. If unset, the tool
+# falls back to the scheme://host the client dialed.
+PUBLIC_URL = os.environ.get("KNOW_PUBLIC_URL", "").strip().rstrip("/")
+
 # Reserved bot identities — (name, email). The email is what the classifier keys on.
 CAPTURE_IDENTITY = ("know-capture", "capture@know.local")
 SECRETARY_IDENTITY = ("know-secretary", "secretary@know.local")
